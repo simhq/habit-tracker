@@ -1,0 +1,4813 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HabitBox — habit tracker with streaks and a heatmap</title>
+<meta name="description" content="Check off each habit with one tap and watch your streak — plus a calendar heatmap of every day you showed up. Private, no account, data kept on your device.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HabitBox">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314181d'/%3E%3Cg fill='none' stroke='%2322c55e' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='6' y='6' width='8' height='8' rx='2'/%3E%3Crect x='18' y='6' width='8' height='8' rx='2' stroke='%233b82f6'/%3E%3Crect x='6' y='18' width='8' height='8' rx='2' stroke='%23a855f7'/%3E%3Cpath d='M19 22l2 2 4-4'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+/* ==========================================================================
+   HabitBox — design tokens and components
+   Dark-first, self-contained. No @import, no CDN, no external fonts.
+   ========================================================================== */
+
+:root {
+  /* type */
+  --font: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+          "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
+
+  /* spacing / radii */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+  --r-full: 999px;
+  --gap: 16px;
+  --pad: 20px;
+
+  /* heatmap cell */
+  --cell: 13px;
+  --cell-gap: 3px;
+  --weeks: 26;
+
+  /* motion */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --fast: 130ms var(--ease);
+  --mid: 220ms var(--ease);
+
+  /* modal */
+  --z-modal: 60;
+  --z-toast: 80;
+}
+
+/* ------------------------------------------------------------- dark theme -- */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:        #0a0c0f;
+  --bg-elev:   #101318;
+  --surface:   #14181e;
+  --surface-2: #1a1f26;
+  --surface-3: #20262f;
+
+  --border:        #232a33;
+  --border-strong: #2f3843;
+
+  --text:    #e9edf3;
+  --text-2:  #a2adbc;
+  --text-3:  #6c7787;
+
+  --accent:      #7dd3fc;
+  --accent-ink:  #062431;
+  --warn:        #fbbf24;
+  --danger:      #f87171;
+  --success:     #4ade80;
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-2: 0 6px 20px -8px rgba(0, 0, 0, .7);
+  --shadow-3: 0 24px 50px -18px rgba(0, 0, 0, .85);
+
+  --scrim: rgba(5, 7, 10, .66);
+  --track: rgba(255, 255, 255, .09);
+
+  /* GitHub-like heatmap ramp (tinted with the habit colour) */
+  --heat-0: #1a1f26;
+  --heat-1: color-mix(in srgb, var(--hc, #22c55e) 26%, var(--heat-0));
+  --heat-2: color-mix(in srgb, var(--hc, #22c55e) 48%, var(--heat-0));
+  --heat-3: color-mix(in srgb, var(--hc, #22c55e) 72%, var(--heat-0));
+  --heat-4: var(--hc, #22c55e);
+}
+
+/* ------------------------------------------------------------ light theme -- */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:        #f7f8fa;
+  --bg-elev:   #ffffff;
+  --surface:   #ffffff;
+  --surface-2: #f2f4f7;
+  --surface-3: #e8ecf1;
+
+  --border:        #e3e7ec;
+  --border-strong: #ced5de;
+
+  --text:    #0f172a;
+  --text-2:  #495667;
+  --text-3:  #6b7789;
+
+  --accent:     #0f172a;
+  --accent-ink: #ffffff;
+  --warn:       #b45309;
+  --danger:     #dc2626;
+  --success:    #15803d;
+
+  --shadow-1: 0 1px 2px rgba(15, 23, 42, .06);
+  --shadow-2: 0 6px 18px -10px rgba(15, 23, 42, .24);
+  --shadow-3: 0 24px 50px -22px rgba(15, 23, 42, .34);
+
+  --scrim: rgba(15, 23, 42, .38);
+  --track: rgba(15, 23, 42, .08);
+
+  --heat-0: #eaeef3;
+  --heat-1: color-mix(in srgb, var(--hc, #22c55e) 30%, var(--heat-0));
+  --heat-2: color-mix(in srgb, var(--hc, #22c55e) 52%, var(--heat-0));
+  --heat-3: color-mix(in srgb, var(--hc, #22c55e) 76%, var(--heat-0));
+  --heat-4: var(--hc, #22c55e);
+}
+
+/* ----------------------------------------------------------------- reset -- */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 { margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+p { margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+svg { display: block; }
+[hidden] { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* -------------------------------------------------------------- topbar --- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(160%) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-inner {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 12px var(--pad);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand {
+  display: flex; align-items: center; gap: 9px;
+  background: none; border: 0; padding: 0;
+  font-size: 16px; font-weight: 700; letter-spacing: -0.02em;
+  color: var(--text); cursor: pointer;
+}
+
+.brand-mark {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  background: var(--surface-3);
+  color: var(--accent);
+}
+
+.topbar-spacer { flex: 1; }
+
+/* ------------------------------------------------------------- buttons --- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 38px; padding: 0 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px; font-weight: 550;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--fast), border-color var(--fast), color var(--fast), transform var(--fast);
+}
+.btn:hover { background: var(--surface-2); border-color: var(--text-3); }
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: .5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+.btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, white); border-color: transparent; }
+
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-ghost:hover { background: var(--surface-2); border-color: transparent; }
+
+.btn-danger { color: var(--danger); }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: var(--danger); }
+
+.btn-icon { width: 38px; padding: 0; }
+.btn-sm { height: 32px; padding: 0 11px; font-size: 13px; border-radius: 10px; }
+.btn-lg { height: 46px; padding: 0 20px; font-size: 15px; }
+
+/* segmented control */
+.seg {
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.seg-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 12px;
+  border: 0; border-radius: 9px;
+  background: transparent; color: var(--text-2);
+  font-size: 13px; font-weight: 550;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+
+/* chips */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12.5px; font-weight: 550;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+.chip:hover { color: var(--text); border-color: var(--border-strong); }
+.chip[aria-pressed="true"] { background: var(--surface-3); color: var(--text); border-color: var(--border-strong); }
+.chip.is-live { color: var(--success); border-color: color-mix(in srgb, var(--success) 45%, var(--border)); }
+.chip.is-error { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.chip[aria-pressed="true"]::before { content: "✓"; font-size: 11px; color: var(--success); }
+
+/* ---------------------------------------------------------------- layout -- */
+.app {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px var(--pad) 80px;
+}
+
+.page-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.page-title { font-size: 28px; letter-spacing: -0.03em; }
+.page-sub { color: var(--text-2); font-size: 14px; margin-top: 2px; }
+
+.section { margin-top: 34px; }
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.section-title { font-size: 15px; }
+.section-sub { color: var(--text-3); font-size: 13px; }
+
+/* ------------------------------------------------------------ stat tiles -- */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+}
+.stat-label {
+  color: var(--text-3);
+  font-size: 11.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .07em;
+}
+.stat-value {
+  display: flex; align-items: baseline; gap: 4px;
+  margin-top: 6px;
+  font-size: 26px; font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.stat-value small { font-size: 13px; font-weight: 550; color: var(--text-3); letter-spacing: 0; }
+.stat-foot { color: var(--text-3); font-size: 12.5px; margin-top: 2px; }
+
+/* -------------------------------------------------------------- toolbar -- */
+.toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.search {
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text-3);
+  min-width: 180px; flex: 1 1 200px; max-width: 320px;
+}
+.search input {
+  flex: 1; min-width: 0;
+  background: none; border: 0; outline: none;
+  color: var(--text); font-size: 14px;
+}
+.search input::placeholder { color: var(--text-3); }
+
+select.control {
+  height: 38px; padding: 0 32px 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text); font-size: 14px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236c7787' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+/* ---------------------------------------------------------- habit cards -- */
+.habits {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.habit {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 16px 16px 14px 20px;
+  overflow: hidden;
+  transition: border-color var(--mid), background var(--mid);
+}
+.habit::before {
+  content: "";
+  position: absolute; inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--hc, var(--accent));
+  opacity: .85;
+}
+.habit::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: radial-gradient(120% 90% at 0% 0%,
+    color-mix(in srgb, var(--hc, var(--accent)) 12%, transparent), transparent 60%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--mid);
+}
+.habit:hover { border-color: var(--border-strong); }
+.habit:hover::after { opacity: 1; }
+.habit.is-done { background: color-mix(in srgb, var(--hc, var(--accent)) 5%, var(--surface)); }
+
+.habit-head { display: flex; align-items: flex-start; gap: 11px; }
+
+.habit-emoji {
+  width: 38px; height: 38px; flex: none;
+  display: grid; place-items: center;
+  font-size: 19px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.habit-id { flex: 1; min-width: 0; }
+.habit-title {
+  font-size: 15.5px; font-weight: 620; letter-spacing: -0.01em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.habit-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 3px;
+  color: var(--text-3); font-size: 12.5px;
+}
+
+.streak {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 22px; padding: 0 8px;
+  border-radius: var(--r-full);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px; font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.streak.is-hot {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 40%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface-2));
+}
+.streak.is-record {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+}
+
+.tag {
+  display: inline-flex; align-items: center;
+  height: 20px; padding: 0 7px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  font-size: 11.5px; font-weight: 550;
+}
+
+/* the one-tap target */
+.check {
+  position: relative;
+  width: 46px; height: 46px; flex: none;
+  display: grid; place-items: center;
+  border: 2px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: transparent;
+  cursor: pointer;
+  transition: background var(--fast), border-color var(--fast), color var(--fast), transform var(--fast);
+}
+.check:hover { border-color: var(--hc, var(--accent)); }
+.check:active { transform: scale(.92); }
+.check.is-done {
+  background: var(--hc, var(--accent));
+  border-color: var(--hc, var(--accent));
+  color: #05131a;
+}
+.check-icon { width: 24px; height: 24px; }
+.check.is-done .check-icon path {
+  stroke-dasharray: 30;
+  stroke-dashoffset: 30;
+  animation: draw 320ms var(--ease) forwards;
+}
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+.check-badge {
+  position: absolute; right: -5px; bottom: -5px;
+  min-width: 21px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center;
+  border-radius: var(--r-full);
+  background: var(--surface-3);
+  border: 1px solid var(--border-strong);
+  color: var(--text-2);
+  font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.habit.is-done .check-badge {
+  background: var(--surface);
+  color: var(--hc, var(--accent));
+  border-color: var(--hc, var(--accent));
+}
+
+/* progress bar for goal habits */
+.bar {
+  position: relative;
+  height: 6px;
+  margin: 12px 0 0 49px;
+  border-radius: var(--r-full);
+  background: var(--track);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--hc, var(--accent));
+  transition: width var(--mid);
+}
+.bar-label {
+  margin: 6px 0 0 49px;
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.bar-label b { color: var(--text-2); font-weight: 650; }
+
+/* card actions */
+.habit-actions {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.icon-btn {
+  width: 30px; height: 30px;
+  display: grid; place-items: center;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border); }
+.icon-btn.is-danger:hover { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
+.icon-btn[aria-pressed="true"] { background: var(--surface-3); color: var(--text); }
+.habit-actions .spacer { flex: 1; }
+
+/* -------------------------------------------------------------- heatmap -- */
+.heat { margin-top: 12px; }
+
+.heat-months {
+  display: flex;
+  gap: var(--cell-gap);
+  margin: 0 0 4px 22px;
+  height: 13px;
+}
+.heat-months span {
+  width: var(--cell);
+  flex: none;
+  color: var(--text-3);
+  font-size: 10px;
+  line-height: 13px;
+  white-space: nowrap;
+  overflow: visible;
+}
+
+.heat-body { display: flex; gap: 6px; }
+
+.heat-days {
+  display: flex; flex-direction: column; gap: var(--cell-gap);
+  width: 16px; flex: none;
+}
+.heat-days span {
+  height: var(--cell);
+  color: var(--text-3);
+  font-size: 9.5px;
+  line-height: var(--cell);
+  text-align: right;
+}
+
+.heat-grid {
+  display: flex; gap: var(--cell-gap);
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.heat-col { display: flex; flex-direction: column; gap: var(--cell-gap); }
+
+.heat-cell {
+  width: var(--cell); height: var(--cell);
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: var(--heat-0);
+  cursor: pointer;
+  transition: transform var(--fast), outline-color var(--fast);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
+.heat-cell:hover { transform: scale(1.25); outline-color: var(--text-3); }
+.heat-cell.is-l1 { background: var(--heat-1); }
+.heat-cell.is-l2 { background: var(--heat-2); }
+.heat-cell.is-l3 { background: var(--heat-3); }
+.heat-cell.is-l4 { background: var(--heat-4); }
+.heat-cell.is-empty { background: transparent; cursor: default; }
+.heat-cell.is-empty:hover { transform: none; outline-color: transparent; }
+.heat-cell.is-future { opacity: .35; }
+.heat-cell.is-today { outline-color: var(--text-2); }
+
+.legend {
+  display: flex; align-items: center; gap: 5px;
+  color: var(--text-3); font-size: 11.5px;
+}
+.legend .heat-cell { width: 11px; height: 11px; cursor: default; }
+.legend .heat-cell:hover { transform: none; outline-color: transparent; }
+
+.heat-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+  margin-top: 10px;
+  color: var(--text-3); font-size: 12px;
+}
+
+/* -------------------------------------------------------------- modals --- */
+.scrim {
+  position: fixed; inset: 0;
+  z-index: var(--z-modal);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: var(--scrim);
+  backdrop-filter: blur(3px);
+  animation: fade 150ms var(--ease);
+}
+@keyframes fade { from { opacity: 0; } }
+
+.modal {
+  width: 100%; max-width: 460px;
+  max-height: min(86vh, 760px);
+  display: flex; flex-direction: column;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-3);
+  animation: rise 200ms var(--ease);
+  overflow: hidden;
+}
+.modal-wide { max-width: 560px; }
+@keyframes rise { from { opacity: 0; transform: translateY(12px) scale(.985); } }
+
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-title { font-size: 16px; }
+.modal-body { padding: 18px; overflow-y: auto; }
+.modal-foot {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  padding: 14px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.modal-foot .spacer { flex: 1; }
+
+/* ----------------------------------------------------------------- tabs -- */
+.tabs {
+  display: flex; gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.tab {
+  flex: 1;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px;
+  border: 0; border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13.5px; font-weight: 550;
+  cursor: pointer;
+  transition: background var(--fast), color var(--fast);
+}
+.tab:hover { color: var(--text); }
+.tab[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-1);
+}
+
+/* ---------------------------------------------------------------- forms -- */
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.field > label, .field-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text-2);
+  font-size: 12.5px; font-weight: 620;
+}
+
+.input {
+  width: 100%; height: 42px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--text);
+  font-size: 15px;
+  transition: border-color var(--fast), background var(--fast);
+}
+.input:hover { border-color: var(--border-strong); }
+.input:focus { outline: none; border-color: var(--accent); background: var(--bg-elev); }
+.input::placeholder { color: var(--text-3); }
+
+textarea.input {
+  height: auto; min-height: 96px;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* tracking-type picker */
+.type-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.type-card {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 11px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-2);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast), color var(--fast);
+}
+.type-card:hover { border-color: var(--border-strong); color: var(--text); }
+.type-card[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+}
+.type-card strong { font-size: 13px; font-weight: 650; }
+.type-card span { font-size: 11.5px; line-height: 1.35; opacity: .85; }
+
+/* emoji + colour pickers */
+.emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 4px;
+  max-height: 148px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.emoji-btn {
+  height: 36px;
+  display: grid; place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background var(--fast), border-color var(--fast);
+}
+.emoji-btn:hover { background: var(--surface-2); }
+.emoji-btn[aria-pressed="true"] { background: var(--surface-3); border-color: var(--accent); }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch {
+  width: 28px; height: 28px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--fast), border-color var(--fast);
+}
+.swatch:hover { transform: scale(1.1); }
+.swatch[aria-pressed="true"] {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--bg-elev) inset;
+}
+
+.weekday-pick { display: flex; gap: 6px; flex-wrap: wrap; }
+.wd {
+  width: 40px; height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 12.5px; font-weight: 620;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast), color var(--fast);
+}
+.wd:hover { border-color: var(--border-strong); color: var(--text); }
+.wd[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.form-error {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border));
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: var(--text);
+  font-size: 13px;
+}
+
+/* --------------------------------------------------------- settings bits -- */
+.set-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 14px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--border);
+}
+.set-row:last-child { border-bottom: 0; }
+.set-row .set-label { font-size: 14px; font-weight: 550; }
+.set-row .set-hint { margin-top: 3px; color: var(--text-3); font-size: 12.5px; max-width: 300px; }
+
+.note {
+  display: flex; gap: 9px;
+  padding: 11px 13px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.note.is-info { border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.note.is-ok { border-color: color-mix(in srgb, var(--success) 45%, var(--border)); color: var(--text); }
+.note.is-error { border-color: color-mix(in srgb, var(--danger) 50%, var(--border)); color: var(--text); }
+.note code { font-family: var(--mono); font-size: 12px; }
+
+.step { margin-bottom: 18px; }
+.step:last-child { margin-bottom: 0; }
+.step-head { display: flex; align-items: flex-start; gap: 10px; }
+.step-num {
+  width: 22px; height: 22px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--text-2);
+  font-size: 12px; font-weight: 700;
+}
+.step-num.is-on { background: var(--success); color: #04140a; }
+
+.code-inline {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 210px;
+}
+.code-inline.is-big {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: .06em;
+  color: var(--text);
+  max-width: none;
+}
+
+.kv { margin-top: 14px; border-top: 1px solid var(--border); }
+.kv-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.kv-k { color: var(--text-3); flex: none; }
+.kv-v { color: var(--text-2); min-width: 0; }
+
+.device-list {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+.device-row {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.device-row:last-child { border-bottom: 0; }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+
+.modal-actions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.danger-zone {
+  margin-top: 20px; padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.danger-zone h4 { color: var(--danger); font-size: 13px; margin-bottom: 6px; }
+
+/* ---------------------------------------------------------------- empty -- */
+.empty {
+  grid-column: 1 / -1;
+  padding: 46px 24px;
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-xl);
+  background: var(--surface);
+}
+.empty-mark {
+  width: 46px; height: 46px;
+  margin: 0 auto 14px;
+  display: grid; place-items: center;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+.empty h3 { font-size: 16px; }
+.empty p { margin: 6px auto 16px; max-width: 380px; color: var(--text-2); font-size: 13.5px; }
+
+/* --------------------------------------------------------------- toasts -- */
+.toasts {
+  position: fixed;
+  left: 50%; bottom: 24px;
+  z-index: var(--z-toast);
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: max-content; max-width: calc(100vw - 32px);
+  pointer-events: none;
+}
+.toast {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-full);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-2);
+  font-size: 13.5px;
+  animation: toastIn 180ms var(--ease);
+}
+.toast.is-out { animation: toastOut 180ms var(--ease) forwards; }
+@keyframes toastIn { from { opacity: 0; transform: translateY(8px); } }
+@keyframes toastOut { to { opacity: 0; transform: translateY(6px); } }
+.toast-action {
+  border: 0; background: none; padding: 0;
+  color: var(--accent);
+  font-size: 13.5px; font-weight: 650;
+  cursor: pointer;
+}
+.toast-action:hover { text-decoration: underline; }
+
+/* --------------------------------------------------------- calendar view -- */
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+
+.cal-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 16px;
+}
+
+.cal-dow {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.cal-dow span {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 11px; font-weight: 650;
+  text-transform: uppercase; letter-spacing: .06em;
+}
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+
+.cal-day {
+  position: relative;
+  min-height: 62px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 6px 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--bg-elev);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast), transform var(--fast);
+}
+.cal-day:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.cal-day.is-out { opacity: .38; }
+.cal-day.is-today { border-color: var(--accent); }
+.cal-day.is-selected { background: var(--surface-3); border-color: var(--text-3); }
+.cal-day.is-perfect { background: color-mix(in srgb, var(--success) 12%, var(--bg-elev)); }
+.cal-day .num { font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+.cal-dots { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
+.cal-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--hc, var(--text-3));
+  opacity: .28;
+}
+.cal-dot.is-done { opacity: 1; }
+
+.cal-ring {
+  position: relative;
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--hc, var(--success)) calc(var(--p, 0) * 1turn), var(--track) 0);
+}
+.cal-ring i {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  display: block;
+}
+.cal-day.is-perfect .cal-ring i { background: color-mix(in srgb, var(--success) 12%, var(--bg-elev)); }
+
+.day-list { display: flex; flex-direction: column; gap: 7px; margin-top: 14px; }
+.day-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--fast), background var(--fast);
+}
+.day-item:hover:not([disabled]) { border-color: var(--border-strong); }
+.day-item[disabled] { opacity: .5; cursor: default; }
+.day-item.is-done { background: color-mix(in srgb, var(--hc, var(--accent)) 8%, var(--surface)); }
+.day-item .habit-emoji { width: 28px; height: 28px; font-size: 14px; }
+
+.day-tick {
+  width: 22px; height: 22px; flex: none;
+  display: grid; place-items: center;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 50%;
+  color: transparent;
+}
+.day-item.is-done .day-tick {
+  background: var(--hc, var(--accent));
+  border-color: var(--hc, var(--accent));
+  color: #05131a;
+}
+
+.year-heat .heat-cell { width: 11px; height: 11px; }
+.year-heat .heat-months { margin-left: 22px; }
+
+/* --------------------------------------------------------------- footer -- */
+.footer {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  margin-top: 40px; padding-top: 16px;
+  border-top: 1px solid var(--border);
+  color: var(--text-3); font-size: 12.5px;
+}
+
+/* ------------------------------------------------------------ responsive -- */
+@media (max-width: 900px) {
+  .cal-wrap { grid-template-columns: minmax(0, 1fr); }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 640px) {
+  :root { --pad: 14px; --cell: 11px; --cell-gap: 2.5px; }
+  body { font-size: 14.5px; }
+  .page-title { font-size: 22px; }
+  .habits { grid-template-columns: 1fr; }
+  .habit { padding: 14px 13px 12px 17px; }
+  .check { width: 44px; height: 44px; }
+  .bar, .bar-label { margin-left: 45px; }
+  .type-pick { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .brand span { display: none; }
+  .stat-value { font-size: 22px; }
+  .toolbar .seg { order: 3; width: 100%; justify-content: space-between; }
+  .toolbar .seg .seg-btn { flex: 1; justify-content: center; }
+  .modal { max-height: 92vh; }
+  .code-inline.is-big { font-size: 12px; letter-spacing: .02em; }
+}
+
+@media (max-width: 420px) {
+  .tab span { display: none; }
+  .tab { height: 36px; }
+  .kv-k { font-size: 11.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+  .heat-cell:hover, .cal-day:hover { transform: none; }
+}
+
+@media print {
+  .topbar, .toolbar, .habit-actions, .toasts, .footer { display: none !important; }
+  body { background: #fff; color: #000; }
+  .habit, .panel { border-color: #ccc; break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <button class="brand" type="button" data-view="today" aria-label="HabitBox home">
+      <span class="brand-mark" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/>
+          <rect x="3" y="14" width="7" height="7" rx="2"/><path d="m14.5 17.5 2 2 3.5-3.5"/>
+        </svg>
+      </span>
+      <span>HabitBox</span>
+    </button>
+
+    <div class="seg" id="view-switch" role="group" aria-label="Switch view">
+      <button class="seg-btn" type="button" data-view="today" aria-pressed="true" title="Today (T)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <span>Today</span>
+      </button>
+      <button class="seg-btn" type="button" data-view="calendar" aria-pressed="false" title="Calendar (C)">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/></svg>
+        <span>Calendar</span>
+      </button>
+    </div>
+
+    <div class="topbar-spacer"></div>
+
+    <button class="btn btn-primary" type="button" data-new="1" title="New habit (N)">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="btn-label-lg">New habit</span>
+    </button>
+
+    <button class="btn btn-icon" type="button" id="theme-btn" aria-label="Switch to light theme" title="Toggle theme">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+      <span class="sr-only">Switch theme</span>
+    </button>
+
+    <button class="btn btn-icon" type="button" id="settings-btn" aria-label="Settings" title="Settings">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      <span class="sr-only">Settings</span>
+    </button>
+  </div>
+</header>
+
+<main class="app">
+  <section id="view-today" aria-label="Today"></section>
+  <section id="view-calendar" aria-label="Calendar" hidden></section>
+
+  <footer class="footer">
+    <span class="row" style="gap:8px">
+      <span id="habit-count">stored on this device</span>
+      <button class="chip" type="button" id="sync-chip" hidden aria-label="Cloud sync status">Off</button>
+    </span>
+    <span class="row" style="gap:6px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+      <span>No account · No ads · No tracking</span>
+    </span>
+  </footer>
+</main>
+
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+/*!
+ * HabitBox engine — pure habit-tracking logic.
+ * No DOM, no network. Importable in Node (for tests) and in the browser.
+ */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.HabitEngine = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  /* ------------------------------------------------------------------ *
+   * Dates — everything is a local-time "YYYY-MM-DD" key.
+   * ------------------------------------------------------------------ */
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function dateToKey(d) {
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function keyToDate(key) {
+    var p = String(key).split('-');
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]), 12, 0, 0, 0);
+  }
+
+  function todayKey(now) { return dateToKey(now || new Date()); }
+
+  function addDays(key, n) {
+    var d = keyToDate(key);
+    d.setDate(d.getDate() + n);
+    return dateToKey(d);
+  }
+
+  function diffDays(a, b) { return Math.round((keyToDate(a) - keyToDate(b)) / 86400000); }
+
+  /** 0 = Sunday … 6 = Saturday (JS native). */
+  function weekdayOf(key) { return keyToDate(key).getDay(); }
+
+  /** Reorder a native weekday so the configured week start becomes index 0. */
+  function weekIndex(key, weekStart) {
+    return (weekdayOf(key) - (weekStart || 0) + 7) % 7;
+  }
+
+  function monthLabel(key) {
+    return keyToDate(key).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+
+  function shortMonth(key) {
+    return keyToDate(key).toLocaleDateString(undefined, { month: 'short' });
+  }
+
+  function humanDate(key) {
+    return keyToDate(key).toLocaleDateString(undefined, {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+  }
+
+  function monthStart(key) {
+    var d = keyToDate(key);
+    return dateToKey(new Date(d.getFullYear(), d.getMonth(), 1, 12));
+  }
+
+  function monthEnd(key) {
+    var d = keyToDate(key);
+    return dateToKey(new Date(d.getFullYear(), d.getMonth() + 1, 0, 12));
+  }
+
+  function addMonths(key, n) {
+    var d = keyToDate(key);
+    var day = d.getDate();
+    var t = new Date(d.getFullYear(), d.getMonth() + n, 1, 12);
+    var last = new Date(t.getFullYear(), t.getMonth() + 1, 0, 12).getDate();
+    return dateToKey(new Date(t.getFullYear(), t.getMonth(), Math.min(day, last), 12));
+  }
+
+  /** Inclusive list of day keys from `from` to `to`. */
+  function rangeKeys(from, to, cap) {
+    var out = [];
+    var max = cap || 4000;
+    var cur = from;
+    var guard = 0;
+    while (diffDays(cur, to) <= 0 && guard++ < max) {
+      out.push(cur);
+      cur = addDays(cur, 1);
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Habits
+   * ------------------------------------------------------------------ */
+
+  var TYPES = ['simple', 'goal', 'count'];
+
+  function normalizeHabit(h, today) {
+    var t = TYPES.indexOf(h.type) >= 0 ? h.type : 'simple';
+    var target = Math.max(1, Math.round(Number(h.target) || 1));
+    var unit = h.unit ? String(h.unit).slice(0, 12) : (t === 'goal' ? 'units' : t === 'count' ? 'reps' : '');
+    var schedule = h.schedule === 'weekly' ? 'weekly' : 'daily';
+    var weekdays = Array.isArray(h.weekdays) && h.weekdays.length
+      ? h.weekdays.map(Number).filter(function (d) { return d >= 0 && d <= 6; })
+      : [0, 1, 2, 3, 4, 5, 6];
+    var uniq = [];
+    weekdays.forEach(function (d) { if (uniq.indexOf(d) < 0) uniq.push(d); });
+    if (!uniq.length) uniq = [0, 1, 2, 3, 4, 5, 6];
+    return {
+      id: String(h.id || uid()),
+      name: (h.name || 'Untitled').toString().slice(0, 60),
+      emoji: (h.emoji || '✅').toString().slice(0, 8),
+      color: /^#[0-9a-fA-F]{6}$/.test(h.color || '') ? h.color : PALETTE[0],
+      type: t,
+      target: target,
+      unit: unit || (t === 'simple' ? '' : 'reps'),
+      schedule: schedule,
+      weekdays: uniq.sort(function (a, b) { return a - b; }),
+      category: h.category ? String(h.category).slice(0, 24) : '',
+      createdAt: h.createdAt || today || todayKey(),
+      updatedAt: isFinite(Number(h.updatedAt)) ? Math.max(0, Math.round(Number(h.updatedAt))) : 0,
+      archived: !!h.archived
+    };
+  }
+
+  function uid() {
+    return 'h' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  var PALETTE = [
+    '#22c55e', '#3b82f6', '#a855f7', '#f97316', '#ef4444',
+    '#14b8a6', '#eab308', '#ec4899', '#6366f1', '#84cc16'
+  ];
+
+  /** Created on/before `day`? Habits are not scheduled before they exist. */
+  function existsOn(habit, day) {
+    return diffDays(day, habit.createdAt || '1970-01-01') >= 0;
+  }
+
+  function scheduledOn(habit, day) {
+    if (!existsOn(habit, day)) return false;
+    if (habit.schedule === 'weekly') return habit.weekdays.indexOf(weekdayOf(day)) >= 0;
+    return true;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Entries + completion
+   *
+   * An entry is { v: value, t: epoch-ms written, d: device id }. Storing the
+   * write time is what makes multi-device merging safe: the most recently
+   * written version of a day wins, so a device that was offline for a week
+   * cannot resurrect a check-in you deliberately cleared on another device.
+   * ------------------------------------------------------------------ */
+
+  var DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+  /**
+   * Coerce anything (legacy number, partial object, junk) into an entry.
+   * A zero value written as an object is meaningful — it records that the day
+   * was deliberately cleared, and when — so it is kept. A legacy plain 0 could
+   * mean anything, so it is dropped.
+   */
+  function normalizeEntry(raw) {
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw === 'number') {
+      return isFinite(raw) && raw > 0 ? { v: Math.round(raw), t: 0, d: '' } : null;
+    }
+    if (typeof raw === 'object') {
+      var v = Math.round(Number(raw.v));
+      if (!isFinite(v) || v < 0) return null;
+      var t = Number(raw.t);
+      return {
+        v: v,
+        t: isFinite(t) && t > 0 ? Math.round(t) : 0,
+        d: raw.d ? String(raw.d).slice(0, 24) : ''
+      };
+    }
+    return null;
+  }
+
+  /** The stored entry for a habit/day, or null. */
+  function entryOf(entries, habitId, day) {
+    var byDay = entries && entries[habitId];
+    if (!byDay) return null;
+    return normalizeEntry(byDay[day]);
+  }
+
+  function getValue(entries, habitId, day) {
+    var e = entryOf(entries, habitId, day);
+    return e ? e.v : 0;
+  }
+
+  function writeEntry(entries, habitId, day, value, now, device) {
+    if (!DAY_RE.test(String(day))) return entries;
+    var byDay = entries[habitId] || (entries[habitId] = {});
+    var v = Math.max(0, Math.round(Number(value) || 0));
+    // `now` of 0 is meaningful (seeded history carries no write time), so only
+    // fall back to the clock when no time was supplied at all.
+    var t = (now === undefined || now === null) ? Date.now() : Math.round(Number(now)) || 0;
+    byDay[day] = { v: v, t: t, d: device || '' };
+    return entries;
+  }
+
+  /** Progress 0..1 for display. */
+  function progressOf(habit, entries, day) {
+    var v = getValue(entries, habit.id, day);
+    var target = habit.type === 'simple' ? 1 : habit.target;
+    return Math.max(0, Math.min(1, v / target));
+  }
+
+  function isComplete(habit, entries, day) {
+    var v = getValue(entries, habit.id, day);
+    if (habit.type === 'simple') return v >= 1;
+    if (habit.type === 'goal') return v >= habit.target;
+    return v >= 1;
+  }
+
+  function isFailed(habit, entries, day) {
+    if (!scheduledOn(habit, day)) return false;
+    return !isComplete(habit, entries, day);
+  }
+
+  function setValue(entries, habitId, day, value, at, device) {
+    return writeEntry(entries, habitId, day, value, at, device);
+  }
+
+  /** One-tap toggle for simple habits (and count habits). */
+  function toggle(entries, habit, day, at, device) {
+    var v = getValue(entries, habit.id, day);
+    return setValue(entries, habit.id, day, v > 0 ? 0 : 1, at, device);
+  }
+
+  function bump(entries, habit, day, delta, at, device) {
+    var v = getValue(entries, habit.id, day);
+    return setValue(entries, habit.id, day, Math.max(0, v + (Number(delta) || 0)), at, device);
+  }
+
+  /**
+   * One tap on a goal/count habit: step toward the target, and land exactly on
+   * it once the remaining distance is no larger than the step.
+   * Tapping an already-complete day clears it.
+   */
+  function advance(entries, habit, day, at, device) {
+    var v = getValue(entries, habit.id, day);
+    var target = habit.target;
+    if (v >= target) return setValue(entries, habit.id, day, 0, at, device);
+    var step = target <= 4 ? 1 : Math.max(1, Math.ceil(target / 5));
+    var next = v + step;
+    return setValue(entries, habit.id, day, next >= target ? target : next, at, device);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Streaks
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Consecutive scheduled days completed, looking back from `from`.
+   * A not-yet-complete today does not break the run (the day is still young),
+   * but a missed scheduled day in the past does.
+   */
+  function streak(habit, entries, from) {
+    var day = from || todayKey();
+    var guard = 0;
+    var count = 0;
+
+    if (!scheduledOn(habit, day)) {
+      day = prevScheduled(habit, day);
+    } else if (!isComplete(habit, entries, day)) {
+      day = prevScheduled(habit, day); // today still open — don't punish it
+    }
+    while (day && guard++ < 3700) {
+      if (!isComplete(habit, entries, day)) break;
+      count++;
+      day = prevScheduled(habit, day);
+    }
+    return count;
+  }
+
+  function prevScheduled(habit, day) {
+    var d = addDays(day, -1);
+    var guard = 0;
+    while (guard++ < 3700) {
+      if (!existsOn(habit, d)) return null;
+      if (scheduledOn(habit, d)) return d;
+      d = addDays(d, -1);
+    }
+    return null;
+  }
+
+  function nextScheduled(habit, day) {
+    var d = addDays(day, 1);
+    var guard = 0;
+    while (guard++ < 3700) {
+      if (scheduledOn(habit, d)) return d;
+      d = addDays(d, 1);
+    }
+    return null;
+  }
+
+  /** Longest run ever recorded. */
+  function bestStreak(habit, entries, today) {
+    var end = today || todayKey();
+    if (!existsOn(habit, end)) return 0;
+    var days = rangeKeys(habit.createdAt, end, 3700);
+    var best = 0, run = 0;
+    for (var i = 0; i < days.length; i++) {
+      if (!scheduledOn(habit, days[i])) continue;
+      if (isComplete(habit, entries, days[i])) {
+        run++;
+        if (run > best) best = run;
+      } else {
+        run = 0;
+      }
+    }
+    return best;
+  }
+
+  /** Success rate over scheduled days so far (null when there are none yet). */
+  function stats(habit, entries, today) {
+    var end = today || todayKey();
+    var from = habit.createdAt;
+    var days = rangeKeys(from, end, 3700);
+    var scheduled = 0, done = 0, total = 0;
+    var last30From = addDays(end, -29);
+    var s30 = 0, d30 = 0;
+    var lastDone = null;
+
+    for (var i = 0; i < days.length; i++) {
+      var d = days[i];
+      if (!scheduledOn(habit, d)) continue;
+      scheduled++;
+      var doneToday = isComplete(habit, entries, d);
+      if (doneToday) {
+        done++;
+        lastDone = d;
+      }
+      total += getValue(entries, habit.id, d);
+      if (diffDays(d, last30From) >= 0) {
+        s30++;
+        if (doneToday) d30++;
+      }
+    }
+    return {
+      scheduled: scheduled,
+      done: done,
+      missed: scheduled - done,
+      rate: scheduled ? done / scheduled : null,
+      rate30: s30 ? d30 / s30 : null,
+      total: total,
+      current: streak(habit, entries, end),
+      best: bestStreak(habit, entries, end),
+      lastDone: lastDone,
+      daysSince: lastDone ? diffDays(end, lastDone) : null
+    };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Calendar / heatmap
+   * ------------------------------------------------------------------ */
+
+  /** done / scheduled for one habit on one day: 0, 1, or a fraction for goals. */
+  function dayFraction(habit, entries, day) {
+    if (!scheduledOn(habit, day)) return null;
+    return progressOf(habit, entries, day);
+  }
+
+  function levelOf(frac) {
+    if (frac === null || frac === undefined || frac <= 0) return 0;
+    if (frac < 0.34) return 1;
+    if (frac < 0.67) return 2;
+    if (frac < 1) return 3;
+    return 4;
+  }
+
+  /** GitHub-style grid: weeks (columns) × weekdays (rows) ending at `end`. */
+  function heatmap(habits, entries, opts) {
+    opts = opts || {};
+    var end = opts.end || todayKey();
+    var weeks = opts.weeks || 26;
+    var weekStart = opts.weekStart || 0;
+    var habit = opts.habit || null;
+    var today = opts.today || todayKey();
+
+    var endIdx = weekIndex(end, weekStart);
+    var lastColEnd = addDays(end, 6 - endIdx);
+    var cols = [];
+    for (var w = weeks - 1; w >= 0; w--) {
+      var colEnd = addDays(lastColEnd, -7 * w);
+      var colStart = addDays(colEnd, -6);
+      var cells = [];
+      for (var i = 0; i < 7; i++) {
+        var day = addDays(colStart, i);
+        var frac = dayFractionFor(habits, entries, day, habit);
+        cells.push({
+          day: day,
+          frac: frac,
+          level: frac === null ? -1 : levelOf(frac),
+          future: diffDays(day, today) > 0,
+          scheduled: frac !== null
+        });
+      }
+      cols.push(cells);
+    }
+    return { weeks: cols, start: cols.length ? cols[0][0].day : end, end: end };
+  }
+
+  /** Fraction for a single habit (if given) or for all scheduled habits that day. */
+  function dayFractionFor(habits, entries, day, habit) {
+    if (habit) return dayFraction(habit, entries, day);
+    var list = (habits || []).filter(function (h) { return !h.archived && scheduledOn(h, day); });
+    if (!list.length) return null;
+    var sum = 0;
+    for (var i = 0; i < list.length; i++) sum += progressOf(list[i], entries, day);
+    return sum / list.length;
+  }
+
+  /** Day-level rollup used by the day detail panel. */
+  function daySummary(habits, entries, day, habit) {
+    var done = 0, scheduled = 0, total = 0;
+    (habits || []).forEach(function (h) {
+      if (h.archived) return;
+      if (habit && h.id !== habit.id) return;
+      if (!scheduledOn(h, day)) return;
+      scheduled++;
+      total += getValue(entries, h.id, day);
+      if (isComplete(h, entries, day)) done++;
+    });
+    return { day: day, done: done, scheduled: scheduled, total: total };
+  }
+
+  /** Month matrix (weeks × 7) for the calendar page. */
+  function monthGrid(monthKey, weekStart) {
+    var ws = weekStart || 0;
+    var first = monthStart(monthKey);
+    var last = monthEnd(monthKey);
+    var gridStart = addDays(first, -weekIndex(first, ws));
+    var gridEnd = addDays(last, 6 - weekIndex(last, ws));
+    var days = rangeKeys(gridStart, gridEnd);
+    var weeks = [];
+    for (var i = 0; i < days.length; i += 7) {
+      weeks.push(days.slice(i, i + 7).map(function (day) {
+        return {
+          day: day,
+          inMonth: day >= first && day <= last,
+          isToday: false
+        };
+      }));
+    }
+    return { weeks: weeks, first: first, last: last };
+  }
+
+  /** Per-habit success rate for each of the last `n` days (for the week bars). */
+  function recentDays(habits, entries, opts) {
+    opts = opts || {};
+    var end = opts.end || todayKey();
+    var n = opts.n || 7;
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) {
+      var day = addDays(end, -i);
+      out.push({
+        day: day,
+        frac: dayFractionFor(habits, entries, day, opts.habit || null),
+        summary: daySummary(habits, entries, day)
+      });
+    }
+    return out;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Aggregate dashboard numbers
+   * ------------------------------------------------------------------ */
+
+  function overall(habits, entries, today) {
+    var end = today || todayKey();
+    var active = (habits || []).filter(function (h) { return !h.archived; });
+    var todayDone = 0, todayScheduled = 0, best = 0, bestHabit = null, totalChecks = 0;
+    active.forEach(function (h) {
+      var st = stats(h, entries, end);
+      totalChecks += st.done;
+      if (st.best > best) { best = st.best; bestHabit = h; }
+      if (scheduledOn(h, end)) {
+        todayScheduled++;
+        if (isComplete(h, entries, end)) todayDone++;
+      }
+    });
+
+    // Perfect-day streak: consecutive days where every scheduled habit was done.
+    // A day that has not finished yet never breaks the run.
+    var perfect = 0;
+    var probe = end;
+    var guard = 0;
+    var earliest = active.reduce(function (min, h) {
+      return !min || h.createdAt < min ? h.createdAt : min;
+    }, null);
+    if (earliest) {
+      while (guard++ < 3700 && diffDays(probe, earliest) >= 0) {
+        var sum = daySummary(active, entries, probe);
+        if (sum.scheduled === 0) { probe = addDays(probe, -1); continue; }
+        if (sum.done >= sum.scheduled) {
+          perfect++;
+          probe = addDays(probe, -1);
+          continue;
+        }
+        if (probe === end) { probe = addDays(probe, -1); continue; } // today is still open
+        break;
+      }
+    }
+
+    var last30 = recentDays(active, entries, { end: end, n: 30 }).filter(function (d) { return d.frac !== null; });
+    var avg30 = last30.length ? last30.reduce(function (a, d) { return a + d.frac; }, 0) / last30.length : null;
+
+    return {
+      habits: active.length,
+      todayDone: todayDone,
+      todayScheduled: todayScheduled,
+      todayRate: todayScheduled ? todayDone / todayScheduled : null,
+      perfectStreak: perfect,
+      best: best,
+      bestHabit: bestHabit ? bestHabit.name : null,
+      totalChecks: totalChecks,
+      avg30: avg30,
+      perfectDays: countPerfectDays(active, entries, end)
+    };
+  }
+
+  function countPerfectDays(habits, entries, end) {
+    var earliest = (habits || []).reduce(function (min, h) {
+      return !min || h.createdAt < min ? h.createdAt : min;
+    }, null);
+    if (!earliest) return 0;
+    var count = 0;
+    var days = rangeKeys(earliest, end || todayKey(), 3700);
+    for (var i = 0; i < days.length; i++) {
+      var s = daySummary(habits, entries, days[i]);
+      if (s.scheduled > 0 && s.done >= s.scheduled) count++;
+    }
+    return count;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Sync: room codes and deterministic merging
+   *
+   * With no login there is no identity to check, so privacy rests on the room
+   * code: a long random secret that only your devices know. The code is turned
+   * into a one-way room id, so the code itself is never uploaded anywhere.
+   * ------------------------------------------------------------------ */
+
+  var CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no I, L, O, 0, 1
+  var B32 = '0123456789abcdefghijklmnopqrstuv';
+
+  function randomBytes(n) {
+    var out = [];
+    var c = (typeof globalThis !== 'undefined') ? globalThis.crypto : null;
+    if (c && typeof c.getRandomValues === 'function') {
+      var buf = new Uint8Array(n);
+      c.getRandomValues(buf);
+      for (var i = 0; i < n; i++) out.push(buf[i]);
+      return out;
+    }
+    for (var j = 0; j < n; j++) out.push(Math.floor(Math.random() * 256));
+    return out;
+  }
+
+  /** A fresh secret code, e.g. "K7QW3M-9XRTPB-2HJ4ND-8VZQK5". */
+  function newRoomCode(groups) {
+    var n = (groups || 4) * 6;
+    var bytes = randomBytes(n);
+    var chars = '';
+    for (var i = 0; i < n; i++) chars += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+    return chars.match(/.{6}/g).join('-');
+  }
+
+  /** Uppercase and strip anything that is not a code character. */
+  function canonicalCode(code) {
+    var clean = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // Map look-alikes so a code typed by hand still matches.
+    clean = clean.replace(/I/g, '1').replace(/L/g, '1').replace(/O/g, '0');
+    return clean;
+  }
+
+  function formatCode(code) {
+    var c = canonicalCode(code);
+    return (c.match(/.{1,6}/g) || []).join('-');
+  }
+
+  function hash32(str) {
+    var h = 0x811c9dc5;
+    for (var i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  function base32(bytes) {
+    var bits = 0, value = 0, out = '';
+    for (var i = 0; i < bytes.length; i++) {
+      value = (value << 8) | bytes[i];
+      bits += 8;
+      while (bits >= 5) {
+        out += B32[(value >>> (bits - 5)) & 31];
+        bits -= 5;
+      }
+    }
+    if (bits > 0) out += B32[(value << (5 - bits)) & 31];
+    return out;
+  }
+
+  /**
+   * Derive the database path segment from a code. Same code on any device
+   * yields the same room, and the code cannot be recovered from the room id.
+   */
+  function roomKeyFromCode(code) {
+    var c = canonicalCode(code);
+    if (c.length < 8) return '';
+    var bytes = [];
+    var seed = 'habitbox.v1:' + c;
+    for (var i = 0; i < 4; i++) {
+      var h = hash32(seed + '#' + i);
+      bytes.push((h >>> 24) & 255, (h >>> 16) & 255, (h >>> 8) & 255, h & 255);
+    }
+    return 'r' + base32(bytes);
+  }
+
+  function newDeviceId() {
+    var bytes = randomBytes(6);
+    var s = '';
+    for (var i = 0; i < bytes.length; i++) s += bytes[i].toString(36);
+    return 'd' + Date.now().toString(36) + s.slice(0, 6);
+  }
+
+  /** A friendly-ish name so you can tell your devices apart in the UI. */
+  function guessDeviceName(ua) {
+    var s = String(ua || '');
+    var os = 'Device';
+    if (/iPhone/i.test(s)) os = 'iPhone';
+    else if (/iPad/i.test(s)) os = 'iPad';
+    else if (/Android/i.test(s)) os = 'Android';
+    else if (/Macintosh|Mac OS X/i.test(s)) os = 'Mac';
+    else if (/Windows/i.test(s)) os = 'Windows';
+    else if (/Linux/i.test(s)) os = 'Linux';
+    var browser = '';
+    if (/Edg\//.test(s)) browser = 'Edge';
+    else if (/OPR\//.test(s)) browser = 'Opera';
+    else if (/Firefox\//.test(s)) browser = 'Firefox';
+    else if (/Chrome\//.test(s)) browser = 'Chrome';
+    else if (/Safari\//.test(s)) browser = 'Safari';
+    return (os + (browser ? ' · ' + browser : '')).slice(0, 32);
+  }
+
+  /**
+   * Which of two entries for the same day wins?
+   * Newer write wins; a tie is broken by device id so every device agrees.
+   * Returns 1 if a wins, -1 if b wins, 0 if identical.
+   */
+  function compareEntries(a, b) {
+    if (!a && !b) return 0;
+    if (!a) return -1;
+    if (!b) return 1;
+    if (a.v === b.v && a.t === b.t && a.d === b.d) return 0;
+    if (a.t !== b.t) return a.t > b.t ? 1 : -1;
+    if (a.v !== b.v) return a.v > b.v ? 1 : -1;
+    if (a.d !== b.d) return a.d > b.d ? 1 : -1;
+    return 0;
+  }
+
+  /**
+   * Merge two states into one. Pure and symmetric (apart from the local
+   * preference on exact ties), so both devices converge on the same result
+   * regardless of the order they sync in.
+   */
+  function mergeStates(local, remote) {
+    var a = migrate(local);
+    var b = migrate(remote);
+    var out = emptyState();
+
+    // --- habits: newest definition wins, tombstones remove them -----------
+    var byId = {};
+    var order = [];
+    a.habits.concat(b.habits).forEach(function (h) {
+      if (!byId[h.id]) { byId[h.id] = h; order.push(h.id); return; }
+      var mine = byId[h.id];
+      var lu = Number(mine.updatedAt) || 0;
+      var ru = Number(h.updatedAt) || 0;
+      if (ru > lu) byId[h.id] = h;
+      else if (ru === lu && mine.archived !== h.archived) byId[h.id].archived = mine.archived && h.archived;
+    });
+    var gone = {};
+    Object.keys(a.deleted).forEach(function (id) { gone[id] = Math.max(gone[id] || 0, a.deleted[id]); });
+    Object.keys(b.deleted).forEach(function (id) { gone[id] = Math.max(gone[id] || 0, b.deleted[id]); });
+
+    var cutoff = Date.now() - 1000 * 60 * 60 * 24 * 120; // forget old tombstones
+    Object.keys(gone).forEach(function (id) {
+      var h = byId[id];
+      var diedAt = gone[id];
+      if (h && (Number(h.updatedAt) || 0) > diedAt) {
+        // Re-created or edited after the delete: keep it, drop the tombstone.
+        delete gone[id];
+        return;
+      }
+      delete byId[id];
+      out.deleted[id] = diedAt;
+      if (diedAt < cutoff) delete out.deleted[id];
+    });
+    out.habits = order.filter(function (id) { return byId[id]; }).map(function (id) { return byId[id]; });
+
+    // --- entries: most recent write per habit/day wins --------------------
+    var ids = {};
+    Object.keys(a.entries).forEach(function (id) { ids[id] = 1; });
+    Object.keys(b.entries).forEach(function (id) { ids[id] = 1; });
+    Object.keys(ids).forEach(function (id) {
+      if (!byId[id]) return; // habit no longer exists, or never existed
+      var days = {};
+      Object.keys(a.entries[id] || {}).forEach(function (d) { days[d] = 1; });
+      Object.keys(b.entries[id] || {}).forEach(function (d) { days[d] = 1; });
+      var outDays = {};
+      Object.keys(days).forEach(function (day) {
+        var av = (a.entries[id] || {})[day];
+        var bv = (b.entries[id] || {})[day];
+        // compareEntries returns >0 when `a` wins, so the winner is bv by default.
+        var winner = compareEntries(av, bv) > 0 ? av : bv;
+        if (!winner) return;
+        // Zero-valued entries are kept: they record that a day was cleared, and
+        // the timestamp is what stops a stale device re-adding the check-in.
+        outDays[day] = { v: winner.v, t: winner.t, d: winner.d };
+      });
+      if (Object.keys(outDays).length) out.entries[id] = outDays;
+    });
+
+    // --- settings: shared preferences only, never device-local ones -------
+    out.settings.weekStart = (a.settings.weekStart !== 1) ? a.settings.weekStart : b.settings.weekStart;
+    out.settings.showArchived = a.settings.showArchived || b.settings.showArchived;
+    out.settings.seeded = a.settings.seeded || b.settings.seeded;
+    out.settings.detail = a.settings.detail || b.settings.detail;
+    out.settings.theme = a.settings.theme || b.settings.theme;
+
+    // --- cloud config: keep whichever side is actually configured ---------
+    var ac = a.settings.cloud;
+    var bc = b.settings.cloud;
+    out.settings.cloud = {
+      enabled: ac.enabled || bc.enabled,
+      room: ac.room || bc.room,
+      code: ac.code || bc.code,
+      device: ac.device || bc.device,
+      lastSync: Math.max(ac.lastSync || 0, bc.lastSync || 0)
+    };
+
+    out.deviceId = a.deviceId || b.deviceId;
+    out.rev = Math.max(a.rev || 0, b.rev || 0) + 1;
+    out.categories = [];
+    var seen = {};
+    a.categories.concat(b.categories).concat(out.habits.map(function (h) { return h.category; }))
+      .forEach(function (c) { if (c && !seen[c]) { seen[c] = 1; out.categories.push(c); } });
+    out.categories = out.categories.slice(0, 30);
+    return out;
+  }
+
+  /**
+   * A cheap content fingerprint. Used to notice that a push would be a no-op,
+   * which is what stops two devices from ping-ponging writes forever.
+   */
+  function fingerprint(state) {
+    var s = migrate(state);
+    var parts = [];
+    s.habits.slice().sort(function (x, y) { return x.id < y.id ? -1 : 1; }).forEach(function (h) {
+      parts.push([h.id, h.name, h.emoji, h.color, h.type, h.target, h.unit, h.schedule,
+        h.weekdays.join('.'), h.category, h.createdAt, h.archived ? 1 : 0, h.updatedAt || 0].join('~'));
+    });
+    Object.keys(s.entries).sort().forEach(function (id) {
+      var days = s.entries[id];
+      Object.keys(days).sort().forEach(function (day) {
+        var e = days[day];
+        parts.push(id + '@' + day + '=' + e.v + ':' + e.t + ':' + e.d);
+      });
+    });
+    Object.keys(s.deleted).sort().forEach(function (id) { parts.push('x' + id + ':' + s.deleted[id]); });
+    return hash32(parts.join('|')) + '-' + parts.length;
+  }
+
+
+
+  /* ------------------------------------------------------------------ *
+   * Store: state shape, migration, seed data
+   * ------------------------------------------------------------------ */
+
+  var STORAGE_KEY = 'habitbox.v1';
+  var SCHEMA_VERSION = 1;
+
+  function emptyState() {
+    return {
+      version: SCHEMA_VERSION,
+      deviceId: '',
+      rev: 0,
+      settings: {
+        theme: 'dark',
+        weekStart: 1,
+        detail: 'detailed',
+        hideCompleted: false,
+        showArchived: false,
+        seeded: false,
+        cloud: emptyCloud()
+      },
+      habits: [],
+      entries: {},
+      deleted: {},
+      categories: []
+    };
+  }
+
+  function emptyCloud() {
+    return { enabled: false, room: '', code: '', lastSync: 0, device: '' };
+  }
+
+  function normalizeCloud(raw) {
+    var base = emptyCloud();
+    if (!raw || typeof raw !== 'object') return base;
+    return {
+      enabled: !!raw.enabled,
+      room: raw.room ? String(raw.room).slice(0, 64) : '',
+      code: raw.code ? canonicalCode(raw.code) : '',
+      lastSync: isFinite(Number(raw.lastSync)) ? Number(raw.lastSync) : 0,
+      device: raw.device ? String(raw.device).slice(0, 32) : ''
+    };
+  }
+
+  function migrate(raw) {
+    var base = emptyState();
+    if (!raw || typeof raw !== 'object') return base;
+    var state = {
+      version: SCHEMA_VERSION,
+      deviceId: raw.deviceId ? String(raw.deviceId).slice(0, 24) : '',
+      rev: isFinite(Number(raw.rev)) ? Math.max(0, Math.round(Number(raw.rev))) : 0,
+      settings: Object.assign(base.settings, raw.settings || {},
+        { cloud: normalizeCloud((raw.settings || {}).cloud) }),
+      habits: Array.isArray(raw.habits) ? raw.habits.map(function (h) { return normalizeHabit(h, todayKey()); }) : [],
+      entries: {},
+      deleted: {},
+      categories: Array.isArray(raw.categories) ? raw.categories.slice(0, 30) : []
+    };
+    var src = raw.entries && typeof raw.entries === 'object' ? raw.entries : {};
+    Object.keys(src).forEach(function (id) {
+      var byDay = src[id];
+      if (!byDay || typeof byDay !== 'object') return;
+      var clean = {};
+      Object.keys(byDay).forEach(function (day) {
+        if (!DAY_RE.test(day)) return;
+        var e = normalizeEntry(byDay[day]);
+        // A zero value is kept on purpose: it records that the day was cleared,
+        // and its timestamp is what stops another device from re-adding it.
+        if (e) clean[day] = { v: e.v, t: e.t, d: e.d };
+      });
+      if (Object.keys(clean).length) state.entries[id] = clean;
+    });
+    var del = raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {};
+    Object.keys(del).forEach(function (id) {
+      var t = Number(del[id]);
+      if (isFinite(t) && t > 0) state.deleted[id] = Math.round(t);
+    });
+    state.habits.forEach(function (h) { h.createdAt = h.createdAt || todayKey(); });
+    return state;
+  }
+
+  function serialize(state) {
+    return JSON.stringify({
+      app: 'HabitBox',
+      version: SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      deviceId: state.deviceId || '',
+      rev: state.rev || 0,
+      settings: state.settings,
+      habits: state.habits,
+      entries: state.entries,
+      deleted: state.deleted || {},
+      categories: state.categories
+    }, null, 2);
+  }
+
+  /** Parse an exported file; returns {state} or {error}. */
+  function deserialize(text) {
+    var raw;
+    try {
+      raw = JSON.parse(text);
+    } catch (e) {
+      return { error: 'That file is not valid JSON.' };
+    }
+    if (!raw || !Array.isArray(raw.habits)) return { error: 'That file does not look like a HabitBox backup.' };
+    return { state: migrate(raw) };
+  }
+
+  /**
+   * Starter habits so the first run is not an empty screen.
+   * Seeded check-ins are written for the past 70 days with believable gaps.
+   */
+  function seed(now) {
+    var today = todayKey(now || new Date());
+    var start = addDays(today, -69);
+    var state = emptyState();
+    state.deviceId = '';
+    state.settings.seeded = true;
+    state.categories = ['Health', 'Mind'];
+
+    var defs = [
+      { name: 'Drink water', emoji: '💧', color: '#3b82f6', type: 'goal', target: 8, unit: 'glasses', category: 'Health', rate: 0.86, full: true },
+      { name: 'Read', emoji: '📚', color: '#a855f7', type: 'goal', target: 20, unit: 'pages', category: 'Mind', rate: 0.74, full: true },
+      { name: 'Meditate', emoji: '🧘', color: '#14b8a6', type: 'simple', target: 1, unit: '', category: 'Mind', rate: 0.81, full: false },
+      { name: 'Push-ups', emoji: '💪', color: '#f97316', type: 'count', target: 1, unit: 'sets', category: 'Health', rate: 0.66, full: true },
+      { name: 'No phone after 10pm', emoji: '🌙', color: '#6366f1', type: 'simple', target: 1, unit: '', category: '', rate: 0.6, full: false }
+    ];
+
+    // Deterministic pseudo-random so the demo data is stable and testable.
+    var s = 1337;
+    function rnd() { s = (s * 1103515245 + 12345) % 2147483648; return s / 2147483648; }
+
+    defs.forEach(function (def, idx) {
+      var habit = normalizeHabit({
+        id: 'seed' + idx,
+        name: def.name,
+        emoji: def.emoji,
+        color: def.color,
+        type: def.type,
+        target: def.target,
+        unit: def.unit,
+        category: def.category,
+        createdAt: start
+      }, today);
+      state.habits.push(habit);
+
+      for (var i = 0; i < 70; i++) {
+        var day = addDays(start, i);
+        if (!scheduledOn(habit, day)) continue;
+        // Habits joined at staggered times; the newest only covers 30 days.
+        if (idx >= 4 && diffDays(day, addDays(today, -29)) < 0) continue;
+        var p = def.rate + (weekdayOf(day) === 0 || weekdayOf(day) === 6 ? -0.12 : 0.04);
+        if (rnd() > p) continue;
+        if (habit.type === 'simple') {
+          setValue(state.entries, habit.id, day, 1, 0);
+        } else if (habit.type === 'goal') {
+          var v = def.full ? habit.target : Math.max(1, Math.round(habit.target * (0.5 + rnd() * 0.5)));
+          setValue(state.entries, habit.id, day, v, 0);
+        } else {
+          setValue(state.entries, habit.id, day, 1 + Math.round(rnd() * 2), 0);
+        }
+      }
+    });
+
+    // Today: leave a couple open so the first tap is meaningful.
+    setValue(state.entries, 'seed2', today, 0, 0);
+    setValue(state.entries, 'seed4', today, 0, 0);
+    return state;
+  }
+  return {
+    // dates
+    pad2: pad2, dateToKey: dateToKey, keyToDate: keyToDate, todayKey: todayKey,
+    addDays: addDays, diffDays: diffDays, weekdayOf: weekdayOf, weekIndex: weekIndex,
+    monthStart: monthStart, monthEnd: monthEnd, addMonths: addMonths, rangeKeys: rangeKeys,
+    monthLabel: monthLabel, shortMonth: shortMonth, humanDate: humanDate,
+    // habits
+    TYPES: TYPES, PALETTE: PALETTE, normalizeHabit: normalizeHabit, uid: uid,
+    existsOn: existsOn, scheduledOn: scheduledOn, nextScheduled: nextScheduled, prevScheduled: prevScheduled,
+    // entries
+    getValue: getValue, setValue: setValue, entryOf: entryOf, normalizeEntry: normalizeEntry,
+    toggle: toggle, bump: bump, advance: advance,
+    progressOf: progressOf, isComplete: isComplete, isFailed: isFailed,
+    // metrics
+    streak: streak, bestStreak: bestStreak, stats: stats,
+    heatmap: heatmap, dayFraction: dayFraction, dayFractionFor: dayFractionFor, levelOf: levelOf,
+    monthGrid: monthGrid, recentDays: recentDays, daySummary: daySummary, overall: overall,
+    countPerfectDays: countPerfectDays,
+    // store
+    STORAGE_KEY: STORAGE_KEY, SCHEMA_VERSION: SCHEMA_VERSION, emptyState: emptyState,
+    migrate: migrate, serialize: serialize, deserialize: deserialize, seed: seed,
+    // sync
+    emptyCloud: emptyCloud, normalizeCloud: normalizeCloud, mergeStates: mergeStates,
+    compareEntries: compareEntries, fingerprint: fingerprint,
+    newRoomCode: newRoomCode, canonicalCode: canonicalCode, formatCode: formatCode,
+    roomKeyFromCode: roomKeyFromCode, newDeviceId: newDeviceId, guessDeviceName: guessDeviceName
+  };
+});
+</script>
+<script>
+/*!
+ * HabitBox cloud adapter — Firebase Realtime Database over plain HTTPS.
+ *
+ * Deliberately avoids the Firebase JS SDK. The Realtime Database speaks a simple
+ * REST dialect, and its streaming endpoint is plain Server-Sent Events, so the
+ * whole transport is a couple of fetch() calls. That keeps the app offline-first
+ * (nothing is downloaded until you enable sync), keeps the single-file bundle
+ * small, and means one bad CDN day cannot break the app.
+ *
+ * Layout in the database:
+ *   rooms/<roomId>/doc   → the whole state document, written atomically
+ *   rooms/<roomId>/meta  → which devices are in the room
+ *
+ * The room id is derived from a long random sync code (see engine.roomKeyFromCode),
+ * so the code itself is never uploaded.
+ */
+(function (root, factory) {
+  var api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.HabitCloud = api;
+})(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  'use strict';
+
+  var DOC_PATH = 'doc';
+  var META_PATH = 'meta';
+  var PUSH_DEBOUNCE_MS = 700;
+  var POLL_MS = 15000;
+  var SSE_QUIET_MS = 45000;
+
+  /* ------------------------------------------------------------ config ---- */
+
+  /**
+   * Accepts the object you copy out of the Firebase console and keeps only what
+   * the Realtime Database actually needs. These values are public by design —
+   * they are not a password; the security rules are what protect the data.
+   */
+  function normalizeConfig(raw) {
+    var c = raw || {};
+    var url = String(c.databaseURL || c.databaseUrl || '').trim().replace(/\/+$/, '');
+    var apiKey = String(c.apiKey || '').trim();
+    return {
+      apiKey: apiKey,
+      databaseURL: url,
+      projectId: String(c.projectId || '').trim(),
+      authDomain: String(c.authDomain || '').trim(),
+      appId: String(c.appId || '').trim()
+    };
+  }
+
+  function validateConfig(raw) {
+    var c = normalizeConfig(raw);
+    var errors = [];
+    if (!c.apiKey) errors.push('apiKey is missing.');
+    if (!c.databaseURL) {
+      errors.push('databaseURL is missing — it looks like https://your-project-default-rtdb.firebaseio.com');
+    } else if (!/^https:\/\/[^\s]+$/i.test(c.databaseURL)) {
+      errors.push('databaseURL must start with https://');
+    }
+    return { ok: !errors.length, config: c, errors: errors };
+  }
+
+  /** Read a pasted config: either raw JSON or the JS object literal from the console. */
+  function parsePastedConfig(text) {
+    var s = String(text || '').trim();
+    if (!s) return { error: 'Paste your Firebase config first.' };
+    // The console shows a JS object literal, which is not valid JSON.
+    var asJson = s.replace(/^\s*(?:const|var|let)\s+\w+\s*=\s*/, '').replace(/;\s*$/, '');
+    var obj = null;
+    try {
+      obj = JSON.parse(asJson);
+    } catch (e) {
+      try {
+        /* eslint-disable no-new-func */
+        obj = new Function('return (' + asJson + ');')();
+      } catch (e2) {
+        return { error: 'That does not look like a Firebase config object.' };
+      }
+    }
+    if (!obj || typeof obj !== 'object') return { error: 'That does not look like a Firebase config object.' };
+    var check = validateConfig(obj);
+    if (!check.ok) return { error: check.errors.join(' ') };
+    return { config: check.config };
+  }
+
+  /* -------------------------------------------------------------- urls ---- */
+
+  function isPlainObject(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
+
+  /**
+   * The Realtime Database REST API wraps write responses as {"data": <value>}.
+   * Normalise that away so callers always deal with the document itself.
+   */
+  function unwrap(response) {
+    if (isPlainObject(response) && Object.prototype.hasOwnProperty.call(response, 'data')) {
+      return response.data;
+    }
+    return response === undefined ? null : response;
+  }
+
+  /** Values in RTDB are JSON; an absent leaf comes back as null. */
+  function urlFor(config, room, path) {
+    var base = config.databaseURL.replace(/\/+$/, '');
+    var u = base + '/rooms/' + encodeURIComponent(room);
+    if (path) u += '/' + path;
+    // The REST API takes the Web API key as its credential parameter.
+    return u + '.json?auth=' + encodeURIComponent(config.apiKey || '');
+  }
+
+  function describeHttpError(status, body) {
+    if (status === 401 || status === 403) {
+      return 'Firebase refused the request (' + status + '). Check that the database rules allow ' +
+        'reads and writes under /rooms, and that this config belongs to that project.';
+    }
+    if (status === 404) return 'Database not found (404). Check databaseURL — the Realtime Database may not be created yet.';
+    if (status === 400) return 'Firebase rejected the request (400). ' + (body ? String(body).slice(0, 160) : '');
+    if (status === 429) return 'Firebase rate limit hit (429). Sync will retry shortly.';
+    if (status >= 500) return 'Firebase is having trouble (' + status + '). Retrying later.';
+    return 'Firebase request failed (' + status + '). ' + (body ? String(body).slice(0, 160) : '');
+  }
+
+  /* ---------------------------------------------------- adapter factory --- */
+
+  /**
+   * Create a transport for one room.
+   *   opts.fetch    override for tests
+   *   opts.sse      override for tests (an EventSource-like constructor)
+   *   opts.onRemote(value)  called with the remote document whenever it arrives
+   *   opts.onStatus(statusObject)
+   *   opts.now, opts.setInterval, opts.clearInterval — injectable for tests
+   */
+  function createTransport(config, room, opts) {
+    opts = opts || {};
+    var fetchImpl = opts.fetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+    var EventSourceImpl = opts.sse || (typeof EventSource === 'function' ? EventSource : null);
+    var now = opts.now || function () { return Date.now(); };
+    var setIntervalImpl = opts.setInterval || setInterval;
+    var clearIntervalImpl = opts.clearInterval || clearInterval;
+    var setTimeoutImpl = opts.setTimeout || setTimeout;
+    var clearTimeoutImpl = opts.clearTimeout || clearTimeout;
+
+    var stopped = false;
+    var sse = null;
+    var pollTimer = null;
+    var pushTimer = null;
+    var pendingState = null;
+    var lastRemoteFingerprint = '';
+    var stats = { pushed: 0, received: 0, errors: 0, mode: 'idle', lastError: '', lastSync: 0 };
+
+    function status(patch) {
+      Object.assign(stats, patch, { lastSync: stats.lastSync });
+      if (opts.onStatus) opts.onStatus(publicStatus());
+    }
+
+    function publicStatus() {
+      return {
+        mode: stats.mode,
+        lastError: stats.lastError,
+        lastSync: stats.lastSync,
+        pushed: stats.pushed,
+        received: stats.received,
+        errors: stats.errors
+      };
+    }
+
+    /* --- reads --------------------------------------------------------- */
+
+    function deliver(value) {
+      if (stopped) return;
+      stats.received++;
+      stats.lastSync = now();
+      lastRemoteFingerprint = value ? JSON.stringify(value).length + ':' + hash(JSON.stringify(value)) : '';
+      status({ mode: sse ? 'live' : 'polling', lastError: '' });
+      if (opts.onRemote) opts.onRemote(value);
+    }
+
+    function hash(str) {
+      var h = 5381;
+      for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+      return h;
+    }
+
+    function pull() {
+      if (stopped || !fetchImpl) return Promise.resolve(null);
+      return fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            if (!res.ok) throw new Error(describeHttpError(res.status, text));
+            var value = unwrap(text ? JSON.parse(text) : null);
+            var fingerprint = value ? hash(JSON.stringify(value)) : '';
+            if (fingerprint !== lastRemoteFingerprint) {
+              lastRemoteFingerprint = fingerprint;
+              deliver(value);
+            } else {
+              status({ mode: sse ? 'live' : 'polling', lastError: '' });
+            }
+            return value;
+          });
+        })
+        .catch(function (err) {
+          stats.errors++;
+          status({ mode: 'error', lastError: err.message || String(err) });
+          return null;
+        });
+    }
+
+    /* --- writes -------------------------------------------------------- */
+
+    function put(doc) {
+      return fetchImpl(urlFor(config, room, DOC_PATH), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(doc)
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          if (!res.ok) throw new Error(describeHttpError(res.status, text));
+          stats.pushed++;
+          stats.lastSync = now();
+          // Remember what we last wrote so an unchanged echo is not re-delivered.
+          lastRemoteFingerprint = hash(JSON.stringify(doc));
+          status({ mode: sse ? 'live' : 'polling', lastError: '' });
+        });
+      });
+    }
+
+    /**
+     * Queue the full document. Writes are debounced because a tap can change the
+     * state several times in a second, and the document is small enough that one
+     * atomic PUT is cheaper and safer than partial updates.
+     *
+     * The write is a read-modify-write: the server copy is merged with ours
+     * immediately before sending. That is what stops a device that just came
+     * online — with an empty or stale copy — from overwriting history that
+     * another device wrote while it was away.
+     */
+    function push(state) {
+      pendingState = state;
+      if (pushTimer) return;
+      pushTimer = setTimeout(function () {
+        pushTimer = null;
+        var doc = pendingState;
+        pendingState = null;
+        if (stopped || !doc) return;
+        status({ mode: 'syncing' });
+        if (!fetchImpl) return;
+
+        var ran = false;
+        var run = function () {
+          if (stopped || ran) return;
+          ran = true;
+          fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+            .then(function (res) { return res.ok ? res.json() : null; })
+            .catch(function () { return null; })
+            .then(function (serverDoc) {
+              serverDoc = unwrap(serverDoc);
+              if (stopped) return null;
+              if (!serverDoc) return put(doc);          // nothing there: just write
+              if (opts.onRemote) {
+                var winner = opts.onRemote(serverDoc);  // app merges, returns what to write
+                return put(winner || doc);
+              }
+              return put(doc);
+            })
+            .catch(function (err) {
+              stats.errors++;
+              status({ mode: 'error', lastError: err.message || String(err) });
+            });
+        };
+
+        // Race the read against a timer: if the read is slow or fails, we still
+        // write, so a flaky read can never leave a tap unsent.
+        var timer = setTimeoutImpl(run, opts.readTimeoutMs || 8000);
+        fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+          .then(function (res) { return res.ok ? res.json() : null; })
+          .catch(function () { return null; })
+          .then(function (serverDoc) {
+            serverDoc = unwrap(serverDoc);
+            if (stopped || ran) return;
+            clearTimeoutImpl(timer);
+            ran = true;
+            if (!serverDoc) return put(doc);
+            if (opts.onRemote) {
+              var winner = opts.onRemote(serverDoc);
+              return put(winner || doc);
+            }
+            return put(doc);
+          })
+          .catch(function (err) {
+            stats.errors++;
+            status({ mode: 'error', lastError: err.message || String(err) });
+          });
+      }, opts.debounceMs === undefined ? PUSH_DEBOUNCE_MS : opts.debounceMs);
+    }
+
+    /** Announce this device so the Settings screen can list the room's devices. */
+    function announce(device) {
+      if (!fetchImpl || !device) return Promise.resolve();
+      return fetchImpl(urlFor(config, room, META_PATH + '/' + device.id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: device.name, at: now() })
+      }).catch(function () { /* presence is best-effort */ });
+    }
+
+    function readMeta() {
+      if (!fetchImpl) return Promise.resolve(null);
+      return fetchImpl(urlFor(config, room, META_PATH), { method: 'GET', cache: 'no-store' })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(unwrap)
+        .catch(function () { return null; });
+    }
+
+    function clearRoom() {
+      if (!fetchImpl) return Promise.resolve();
+      return fetchImpl(urlFor(config, room), { method: 'DELETE' })
+        .then(function (res) {
+          if (!res.ok) throw new Error(describeHttpError(res.status, ''));
+          lastRemoteFingerprint = '';
+        });
+    }
+
+    /* --- streaming ----------------------------------------------------- */
+
+    /**
+     * Firebase streams changes over Server-Sent Events. If that is unavailable
+     * (old browser, blocked by a proxy) we fall back to polling.
+     */
+    function startStream() {
+      if (stopped || !EventSourceImpl || !config.apiKey) return false;
+      try {
+        sse = new EventSourceImpl(
+          config.databaseURL.replace(/\/+$/, '') + '/rooms/' + encodeURIComponent(room) + '/' + DOC_PATH +
+          '.json?auth=' + encodeURIComponent(config.apiKey)
+        );
+      } catch (err) {
+        sse = null;
+        return false;
+      }
+
+      sse.addEventListener('put', function (ev) {
+        try {
+          var msg = JSON.parse(ev.data);
+          if (msg && msg.data !== undefined && msg.path === '/') deliver(msg.data);
+        } catch (err) { /* ignore malformed frame */ }
+      });
+      sse.addEventListener('patch', function () {
+        // A patch means a partial write; re-read the document to stay simple.
+        pull();
+      });
+      sse.addEventListener('keep-alive', function () { status({ mode: 'live' }); });
+      sse.addEventListener('cancel', function () { status({ mode: 'live', lastError: 'Access to the room was revoked.' }); });
+      sse.addEventListener('error', function () {
+        // EventSource retries on its own; keep polling as a safety net.
+        status({ mode: 'polling', lastError: '' });
+      });
+      status({ mode: 'live' });
+      return true;
+    }
+
+    /* --- lifecycle ----------------------------------------------------- */
+
+    function start() {
+      stopped = false;
+      var streaming = startStream();
+      if (!streaming) status({ mode: 'polling' });
+      // Poll at a slow rate as well: SSE can silently stall behind captive
+      // portals, and polling also covers browsers without EventSource.
+      pollTimer = setIntervalImpl(pull, opts.pollMs || POLL_MS);
+      return pull().then(function () { return { streaming: streaming }; });
+    }
+
+    function stop() {
+      stopped = true;
+      if (sse) { try { sse.close(); } catch (e) { /* already closed */ } sse = null; }
+      if (pollTimer) { clearIntervalImpl(pollTimer); pollTimer = null; }
+      if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; }
+      status({ mode: 'idle' });
+    }
+
+    /** Write and read once, to prove the config works before trusting it. */
+    function test() {
+      if (!fetchImpl) return Promise.reject(new Error('This browser cannot reach the network.'));
+      return fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+        .then(function (res) {
+          return res.text().then(function (text) {
+            if (!res.ok) throw new Error(describeHttpError(res.status, text));
+            var value = unwrap(text ? JSON.parse(text) : null);
+            return { ok: true, empty: !value, url: config.databaseURL + '/rooms/' + room };
+          });
+        });
+    }
+
+    return {
+      start: start,
+      stop: stop,
+      pull: pull,
+      push: push,
+      test: test,
+      announce: announce,
+      readMeta: readMeta,
+      clearRoom: clearRoom,
+      status: publicStatus,
+      url: function () { return config.databaseURL + '/rooms/' + room; }
+    };
+  }
+
+  return {
+    normalizeConfig: normalizeConfig,
+    validateConfig: validateConfig,
+    parsePastedConfig: parsePastedConfig,
+    urlFor: urlFor,
+    describeHttpError: describeHttpError,
+    isPlainObject: isPlainObject,
+    unwrap: unwrap,
+    createTransport: createTransport,
+    DOC_PATH: DOC_PATH,
+    META_PATH: META_PATH
+  };
+});
+</script>
+<script>
+/*!
+ * HabitBox UI — rendering and interaction.
+ * Depends on HabitEngine (src/engine.js). No network calls, no accounts.
+ */
+(function () {
+  'use strict';
+
+  var E = window.HabitEngine;
+  var Cloud = window.HabitCloud;
+  if (!E) { document.body.innerHTML = '<p style="padding:24px">Engine failed to load.</p>'; return; }
+
+  /* ================================================================ state == */
+
+  var LS_KEY = E.STORAGE_KEY;
+  var LS_CONFIG = 'habitbox.firebase';   // device-local, never synced
+
+  var ui = {
+    view: 'today',
+    month: E.monthStart(E.todayKey()),
+    selectedDay: E.todayKey(),
+    habitFilter: 'all',
+    query: '',
+    openHeat: {},             // habitId -> true when the heatmap is expanded
+    collapsed: {},            // habitId -> true when the card is collapsed
+    heatWeeks: 26,
+    yearHabit: 'all',
+    form: null,               // draft habit for the add/edit modal
+    formMode: 'new',
+    settingsTab: 'app',
+    configDraft: '',          // pasted Firebase config
+    codeDraft: '',            // sync code being entered
+    syncNote: null,           // { tone, text } shown in the Cloud tab
+    busy: false,
+    devices: null             // room device list, once fetched
+  };
+
+  var store = load();
+
+  /** This device needs a stable identity so merges can be ordered deterministically. */
+  function ensureIdentity() {
+    if (!store.deviceId) store.deviceId = E.newDeviceId();
+    if (!store.settings.cloud) store.settings.cloud = E.emptyCloud();
+    if (!store.settings.cloud.device) store.settings.cloud.device = deviceName();
+    if (!store.deleted) store.deleted = {};
+  }
+
+  function deviceName() {
+    var ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+    return E.guessDeviceName(ua);
+  }
+
+  function load() {
+    var raw = null;
+    try { raw = localStorage.getItem(LS_KEY); } catch (err) { raw = null; }
+    if (!raw) return E.seed();
+    var parsed;
+    try { parsed = JSON.parse(raw); } catch (err) { parsed = null; }
+    return E.migrate(parsed);
+  }
+
+  function loadConfig() {
+    try {
+      var raw = localStorage.getItem(LS_CONFIG);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      var check = Cloud.validateConfig(parsed);
+      return check.ok ? check.config : null;
+    } catch (err) { return null; }
+  }
+
+  function saveConfig(config) {
+    try {
+      if (config) localStorage.setItem(LS_CONFIG, JSON.stringify(config));
+      else localStorage.removeItem(LS_CONFIG);
+    } catch (err) { /* storage unavailable */ }
+  }
+
+  var saveTimer = null;
+  function save() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      saveTimer = null;
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(store));
+      } catch (err) {
+        toast('Could not save — device storage may be full', null, 'warn');
+      }
+    }, 120);
+    pushSoon();
+  }
+
+  function saveNow() {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    try { localStorage.setItem(LS_KEY, JSON.stringify(store)); } catch (err) { /* ignore */ }
+  }
+
+  /* ============================================================= sync ===== */
+
+  /**
+   * The sync loop, in one place:
+   *   1. write a tap locally (immediately, so the app never waits on the network)
+   *   2. push the whole document to the room, debounced
+   *   3. on any remote document, merge it with what we have and adopt the result
+   *   4. only push again if the merge actually produced something new — this is
+   *      what stops two devices from bouncing writes at each other forever
+   */
+  var cloud = {
+    config: null,
+    transport: null,
+    status: { mode: 'off', lastError: '', lastSync: 0 },
+    lastPushed: '',
+    applying: false
+  };
+
+  function cloudReady() {
+    return !!(cloud.transport && store.settings.cloud && store.settings.cloud.enabled);
+  }
+
+  function pushSoon() {
+    if (!cloudReady() || cloud.applying) return;
+    cloud.transport.push(docForCloud());
+  }
+
+  /** The document that goes to the database: no device-local preferences. */
+  function docForCloud() {
+    return {
+      rev: store.rev || 0,
+      deviceId: store.deviceId || '',
+      settings: {
+        weekStart: store.settings.weekStart,
+        showArchived: !!store.settings.showArchived,
+        seeded: !!store.settings.seeded,
+        detail: store.settings.detail
+      },
+      habits: store.habits,
+      entries: store.entries,
+      deleted: store.deleted || {},
+      categories: store.categories || []
+    };
+  }
+
+  /**
+   * Serialize a cloud document for comparison.
+   *
+   * Two deliberate choices here:
+   *   - `rev` and `deviceId` are bookkeeping, not content. Include them and the
+   *     merged document looks different from the server's copy every pass, which
+   *     would turn every read into a write.
+   *   - entries are compared by VALUE only. A cleared day is stored as {v:0} so
+   *     its timestamp can win a merge, but for equality a cleared day and an
+   *     absent day are the same thing, so "not done" converges either way.
+   */
+  function serializeDoc(doc) {
+    var entries = {};
+    Object.keys(doc.entries || {}).sort().forEach(function (habitId) {
+      var days = doc.entries[habitId] || {};
+      var out = {};
+      Object.keys(days).sort().forEach(function (day) {
+        var e = E.normalizeEntry(days[day]);
+        if (e && e.v > 0) out[day] = e.v;
+      });
+      if (Object.keys(out).length) entries[habitId] = out;
+    });
+    var habits = (doc.habits || []).slice().sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+    var deleted = {};
+    Object.keys(doc.deleted || {}).sort().forEach(function (id) { deleted[id] = doc.deleted[id]; });
+    return JSON.stringify({
+      settings: doc.settings || {},
+      habits: habits,
+      entries: entries,
+      deleted: deleted,
+      categories: (doc.categories || []).slice().sort()
+    });
+  }
+
+  /**
+   * Reconcile an incoming cloud document with the local copy. Runs both when a
+   * read delivers the room and as the pre-write read inside a push, so a device
+   * that has been offline can never clobber work done elsewhere.
+   *
+   * The two decisions are separate and must stay that way:
+   *   - adopt when the merge contains anything we do not have locally, even if
+   *     the server already has it (otherwise a clear made elsewhere never lands)
+   *   - write back only when the merge contains something the SERVER lacks
+   *     (otherwise two devices ping-pong writes at each other forever)
+   */
+  function onRemote(doc) {
+    if (!doc) return null;
+    var mineDoc = docForCloud();
+    var merged = E.mergeStates(mineDoc, doc);
+    merged.deviceId = mineDoc.deviceId;
+
+    var mine = serializeDoc(mineDoc);
+    var theirs = serializeDoc(doc);
+    var next = serializeDoc(merged);
+
+    if (next !== mine) adopt(merged);
+    return next === theirs ? null : merged;
+  }
+
+  function adopt(merged) {
+    cloud.applying = true;
+    store.rev = merged.rev;
+    store.habits = merged.habits;
+    store.entries = merged.entries;
+    store.deleted = merged.deleted;
+    store.categories = merged.categories;
+    store.settings.weekStart = merged.settings.weekStart;
+    store.settings.showArchived = merged.settings.showArchived;
+    store.settings.seeded = merged.settings.seeded || store.settings.seeded;
+    var cloudCfg = store.settings.cloud;
+    store.settings.cloud = Object.assign({}, merged.settings.cloud, {
+      enabled: cloudCfg.enabled, code: cloudCfg.code, room: cloudCfg.room, device: cloudCfg.device
+    });
+    saveNow();
+    cloud.applying = false;
+    render();
+  }
+
+  function startSync(opts) {
+    stopSync(false);
+    var cfg = store.settings.cloud;
+    if (!cfg || !cfg.enabled || !cfg.room) return Promise.resolve(false);
+    if (!cloud.config) return Promise.resolve(false);
+
+    cloud.status = { mode: 'connecting', lastError: '', lastSync: 0 };
+    cloud.transport = Cloud.createTransport(cloud.config, cfg.room, {
+      onRemote: onRemote,
+      onStatus: function (s) {
+        cloud.status = s;
+        paintSyncStatus();
+      }
+    });
+
+    return cloud.transport.start().then(function () {
+      cloud.transport.announce({ id: store.deviceId, name: cfg.device || deviceName() });
+      // Upload what we have. Without this, a device that turns sync on would
+      // show an empty room to its other devices until the next local edit.
+      cloud.transport.push(docForCloud());
+      return true;
+    }).catch(function (err) {
+      cloud.status = { mode: 'error', lastError: err.message || String(err), lastSync: 0 };
+      paintSyncStatus();
+      return false;
+    });
+  }
+
+  function stopSync(clearFlag) {
+    if (cloud.transport) { try { cloud.transport.stop(); } catch (e) { /* gone */ } }
+    cloud.transport = null;
+    cloud.lastPushed = '';
+    if (clearFlag !== false && store.settings.cloud) store.settings.cloud.enabled = false;
+    cloud.status = { mode: 'off', lastError: '', lastSync: 0 };
+    paintSyncStatus();
+  }
+
+  function syncStatusLabel() {
+    var m = cloud.status.mode;
+    if (!store.settings.cloud || !store.settings.cloud.enabled) return 'Off';
+    if (m === 'live') return 'Live';
+    if (m === 'polling') return 'Checking for changes';
+    if (m === 'syncing') return 'Saving…';
+    if (m === 'connecting') return 'Connecting…';
+    if (m === 'error') return 'Not syncing';
+    return 'Off';
+  }
+
+  function relativeTime(ts) {
+    if (!ts) return 'never';
+    var secs = Math.max(0, Math.round((Date.now() - ts) / 1000));
+    if (secs < 10) return 'just now';
+    if (secs < 60) return secs + 's ago';
+    if (secs < 3600) return Math.round(secs / 60) + 'm ago';
+    if (secs < 86400) return Math.round(secs / 3600) + 'h ago';
+    return Math.round(secs / 86400) + 'd ago';
+  }
+
+  function paintSyncStatus() {
+    var chip = $('#sync-chip');
+    if (!chip) return;
+    var on = store.settings.cloud && store.settings.cloud.enabled;
+    chip.hidden = !on;
+    if (!on) return;
+    var mode = cloud.status.mode;
+    chip.className = 'chip ' + (mode === 'error' ? 'is-error' : mode === 'live' ? 'is-live' : '');
+    chip.textContent = syncStatusLabel();
+    chip.title = 'Last synced ' + relativeTime(cloud.status.lastSync) +
+      (cloud.status.lastError ? ' · ' + cloud.status.lastError : '');
+  }
+
+  function today() { return E.todayKey(); }
+
+  function habits() {
+    return store.habits.filter(function (h) { return !h.archived; });
+  }
+
+  function visibleHabits() {
+    var q = ui.query.trim().toLowerCase();
+    var showArchived = !!store.settings.showArchived;
+    var out = store.habits.filter(function (h) {
+      if (h.archived && !showArchived) return false;
+      if (q && (h.name + ' ' + (h.category || '')).toLowerCase().indexOf(q) < 0) return false;
+      if (ui.habitFilter !== 'all' && (h.category || '') !== ui.habitFilter) return false;
+      return true;
+    });
+    out.sort(function (a, b) {
+      // Active habits first, then unfinished before finished.
+      if (!!a.archived !== !!b.archived) return a.archived ? 1 : -1;
+      var ad = E.isComplete(a, store.entries, today()) ? 1 : 0;
+      var bd = E.isComplete(b, store.entries, today()) ? 1 : 0;
+      return ad - bd;
+    });
+    return out;
+  }
+
+  function find(id) {
+    for (var i = 0; i < store.habits.length; i++) if (store.habits[i].id === id) return store.habits[i];
+    return null;
+  }
+
+  /** Note that a habit's definition changed, so other devices take this version. */
+  function touch(habit) {
+    if (habit) habit.updatedAt = Date.now();
+  }
+
+  /** Bump the document revision — a cheap "this changed" marker for diagnostics. */
+  function tick() {
+    store.rev = (store.rev || 0) + 1;
+  }
+
+  function categories() {
+    var set = {};
+    store.habits.forEach(function (h) { if (h.category) set[h.category] = 1; });
+    (store.categories || []).forEach(function (c) { if (c) set[c] = 1; });
+    return Object.keys(set).sort();
+  }
+
+  /* ================================================================= dom == */
+
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  var $$ = function (sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); };
+
+  function el(tag, attrs, kids) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        var v = attrs[k];
+        if (v === null || v === undefined || v === false) return;
+        if (k === 'class') node.className = v;
+        else if (k === 'text') node.textContent = v;
+        else if (k === 'html') {
+          // Structured markup goes through the template element so nesting is
+          // real DOM, not a string that later queries cannot see.
+          var tpl = document.createElement('template');
+          tpl.innerHTML = v;
+          while (tpl.content && tpl.content.firstChild) node.appendChild(tpl.content.firstChild);
+          if (!tpl.content) node.innerHTML = v;   // very old engines
+        } else if (k === 'style') node.setAttribute('style', v);
+        else if (k.slice(0, 2) === 'on' && typeof v === 'function') node.addEventListener(k.slice(2), v);
+        else node.setAttribute(k, v === true ? '' : String(v));
+      });
+    }
+    if (kids) {
+      (Array.isArray(kids) ? kids : [kids]).forEach(function (c) {
+        if (c === null || c === undefined || c === false) return;
+        node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      });
+    }
+    return node;
+  }
+
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  /** Lucide-style stroked icons, 24×24 viewBox. */
+  var ICONS = {
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    calendar: '<path d="M8 2v4M16 2v4M3 10h18"/><rect x="3" y="4" width="18" height="18" rx="2"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+    trash: '<path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+    pencil: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    chevronLeft: '<path d="m15 18-6-6 6-6"/>',
+    chevronRight: '<path d="m9 18 6-6-6-6"/>',
+    sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>',
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+    upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+    flame: '<path d="M12 2s4 4.5 4 8a4 4 0 0 1-8 0c0-1.5.5-2.5 1-3.5C7.5 8 6 10.5 6 13a6 6 0 0 0 12 0c0-4.5-4-8-6-11z"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+    archive: '<rect x="2" y="4" width="20" height="5" rx="1"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9M10 13h4"/>',
+    target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
+    repeat: '<path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
+    sparkle: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+    lock: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+    cloud: '<path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.2 11.2 4 4 0 0 0 7 19h10.5z"/>',
+    copy: '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>'
+  };
+
+  function icon(name, size, cls) {
+    var s = size || 18;
+    return '<svg class="' + (cls || '') + '" width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (ICONS[name] || '') + '</svg>';
+  }
+
+  /* ============================================================== toasts == */
+
+  function toast(message, action, tone) {
+    var host = $('#toasts');
+    var node = el('div', { class: 'toast', role: 'status' }, [
+      tone === 'warn' ? el('span', { html: icon('sparkle', 15), style: 'display:flex;color:var(--warn)' }) : null,
+      el('span', { text: message })
+    ]);
+    if (action) {
+      node.appendChild(el('button', {
+        class: 'toast-action',
+        type: 'button',
+        text: action.label,
+        onclick: function () { dismiss(); action.run(); }
+      }));
+    }
+    function dismiss() {
+      node.classList.add('is-out');
+      setTimeout(function () { if (node.parentNode) node.parentNode.removeChild(node); }, 220);
+    }
+    host.appendChild(node);
+    setTimeout(dismiss, action ? 6000 : 2800);
+    return dismiss;
+  }
+
+  /* ================================================================ modals = */
+
+  var openModalEl = null;
+  var lastFocus = null;
+
+  function openModal(node, opts) {
+    closeModal();
+    lastFocus = document.activeElement;
+    openModalEl = el('div', { class: 'scrim', onmousedown: function (ev) { if (ev.target === this) (opts && opts.onScrim) ? opts.onScrim() : closeModal(); } }, [node]);
+    document.body.appendChild(openModalEl);
+    trapFocus(openModalEl);
+    var focusable = openModalEl.querySelector('[autofocus], input, textarea, select, button');
+    if (focusable) setTimeout(function () { focusable.focus(); }, 30);
+    return openModalEl;
+  }
+
+  function closeModal() {
+    if (openModalEl && openModalEl.parentNode) openModalEl.parentNode.removeChild(openModalEl);
+    openModalEl = null;
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch (e) { /* gone */ } }
+    lastFocus = null;
+  }
+
+  function trapFocus(container) {
+    container.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Tab') return;
+      var items = $$('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])', container)
+        .filter(function (n) { return n.offsetParent !== null; });
+      if (!items.length) return;
+      var first = items[0], last = items[items.length - 1];
+      if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+      else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+    });
+  }
+
+  function confirmModal(opts) {
+    var node = el('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': opts.title }, [
+      el('div', { class: 'modal-head' }, [
+        el('h2', { class: 'modal-title', text: opts.title }),
+        el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', html: icon('x', 18), onclick: closeModal })
+      ]),
+      el('div', { class: 'modal-body' }, [
+        el('p', { class: 'small muted', text: opts.body })
+      ]),
+      el('div', { class: 'modal-foot' }, [
+        el('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: closeModal }),
+        el('button', {
+          class: 'btn ' + (opts.danger ? 'btn-danger' : 'btn-primary'),
+          type: 'button',
+          text: opts.confirmLabel || 'Confirm',
+          onclick: function () { closeModal(); opts.onConfirm(); }
+        })
+      ])
+    ]);
+    openModal(node);
+  }
+
+  /* ============================================================ habit card = */
+
+  var WEEK_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  var MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  function scheduleText(h) {
+    if (h.schedule === 'daily') return 'Every day';
+    if (h.weekdays.length === 7) return 'Every day';
+    if (h.weekdays.length === 5 && h.weekdays.join(',') === '1,2,3,4,5') return 'Weekdays';
+    if (h.weekdays.length === 2 && h.weekdays.join(',') === '0,6') return 'Weekends';
+    return h.weekdays.map(function (d) { return WEEK_LABELS[d]; }).join(' ');
+  }
+
+  function typeText(h) {
+    if (h.type === 'simple') return 'Simple';
+    if (h.type === 'goal') return h.target + ' ' + h.unit + ' / day';
+    return 'Count ' + h.unit;
+  }
+
+  function progressText(h, v) {
+    if (h.type === 'goal') return v + ' / ' + h.target + ' ' + h.unit;
+    if (h.type === 'count') return v + ' ' + h.unit;
+    return '';
+  }
+
+  function cellTitle(h, cell) {
+    var d = E.humanDate(cell.day);
+    if (cell.future) return d + ' — not yet';
+    if (!cell.scheduled) return d + ' — not scheduled';
+    var v = E.getValue(store.entries, h.id, cell.day);
+    if (h.type === 'simple') return d + (v ? ' — done' : ' — missed');
+    if (h.type === 'goal') return d + ' — ' + v + '/' + h.target + ' ' + h.unit + (v >= h.target ? ' ✓' : '');
+    return d + ' — ' + v + ' ' + h.unit + (v > 0 ? ' ✓' : ' — missed');
+  }
+
+  function heatmapBlock(h, weeks, cls) {
+    var map = E.heatmap([h], store.entries, {
+      end: today(), weeks: weeks, weekStart: store.settings.weekStart, habit: h, today: today()
+    });
+
+    var monthRow = el('div', { class: 'heat-months' });
+    var lastMonth = -1;
+    map.weeks.forEach(function (col) {
+      var d = E.keyToDate(col[0].day);
+      var label = '';
+      if (d.getMonth() !== lastMonth) { label = MONTHS_SHORT[d.getMonth()]; lastMonth = d.getMonth(); }
+      monthRow.appendChild(el('span', { text: label }));
+    });
+
+    var dayCol = el('div', { class: 'heat-days' });
+    var ws = store.settings.weekStart;
+    for (var i = 0; i < 7; i++) {
+      var wd = (ws + i) % 7;
+      var show = wd === 1 || wd === 3 || wd === 5;
+      dayCol.appendChild(el('span', { text: show ? WEEK_LABELS[wd] : '' }));
+    }
+
+    var grid = el('div', { class: 'heat-grid' });
+    map.weeks.forEach(function (col) {
+      var colEl = el('div', { class: 'heat-col' });
+      col.forEach(function (cell) {
+        var classes = ['heat-cell'];
+        if (cell.level === -1) classes.push('is-empty');
+        else classes.push('is-l' + cell.level);
+        if (cell.future) classes.push('is-future');
+        if (cell.day === today()) classes.push('is-today');
+        colEl.appendChild(el('button', {
+          class: classes.join(' '),
+          type: 'button',
+          title: cellTitle(h, cell),
+          'aria-label': cellTitle(h, cell),
+          'data-day': cell.day,
+          'data-habit': h.id,
+          'data-heat': '1'
+        }));
+      });
+      grid.appendChild(colEl);
+    });
+
+    var legend = el('div', { class: 'legend' }, [
+      el('span', { text: 'Less' }),
+      el('i', { class: 'heat-cell is-l0' }), el('i', { class: 'heat-cell is-l1' }),
+      el('i', { class: 'heat-cell is-l2' }), el('i', { class: 'heat-cell is-l3' }),
+      el('i', { class: 'heat-cell is-l4' }),
+      el('span', { text: 'More' })
+    ]);
+
+    var st = E.stats(h, store.entries, today());
+
+    return el('div', { class: 'heat ' + (cls || ''), style: '--hc:' + h.color }, [
+      monthRow,
+      el('div', { class: 'heat-body' }, [dayCol, grid]),
+      el('div', { class: 'heat-foot' }, [
+        legend,
+        el('span', { class: 'tiny dim', text: (st.current > 0 ? '🔥 ' + st.current + ' day streak · ' : '') + (st.rate === null ? 'no history yet' : Math.round(st.rate * 100) + '% success') })
+      ])
+    ]);
+  }
+
+  function habitCard(h) {
+    var v = E.getValue(store.entries, h.id, today());
+    var done = E.isComplete(h, store.entries, today());
+    var st = E.stats(h, store.entries, today());
+    var isGoal = h.type === 'goal';
+    var pct = Math.round(E.progressOf(h, store.entries, today()) * 100);
+
+    var card = el('article', {
+      class: 'habit' + (done ? ' is-done' : '') + (h.archived ? ' is-archived' : ''),
+      style: '--hc:' + h.color,
+      'data-habit': h.id
+    });
+
+    /* --- header ------------------------------------------------------- */
+    var streakPill = el('span', { class: 'streak-pill' + (st.current ? '' : ' is-cold') }, [
+      el('span', { html: icon('flame', 13), style: 'display:flex;opacity:' + (st.current ? 1 : .5) }),
+      el('span', { text: st.current ? String(st.current) : '—' })
+    ]);
+    if (st.current) streakPill.title = st.current + ' ' + (h.schedule === 'daily' ? 'day' : 'session') + ' streak · best ' + st.best;
+
+    var meta = el('div', { class: 'habit-meta' }, [
+      streakPill,
+      el('span', { class: 'dot' }),
+      el('span', { text: typeText(h) }),
+      h.category ? el('span', { class: 'dot' }) : null,
+      h.category ? el('span', { text: h.category }) : null,
+      h.schedule !== 'daily' ? el('span', { class: 'dot' }) : null,
+      h.schedule !== 'daily' ? el('span', { text: scheduleText(h) }) : null
+    ]);
+
+    var checkInner = [
+      el('span', {
+        html: '<svg class="check-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" ' +
+              'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.check + '</svg>'
+      })
+    ];
+    if (h.type === 'count' && v > 0) checkInner.push(el('span', { class: 'check-badge', text: String(v) }));
+
+    var check = el('button', {
+      class: 'check' + (done ? ' is-done' : ''),
+      type: 'button',
+      'data-bump': h.id,
+      'aria-pressed': done ? 'true' : 'false',
+      'aria-label': (done ? 'Undo ' : 'Complete ') + h.name + ' for today',
+      title: done ? 'Tap to undo' : 'Tap to complete',
+      html: null
+    }, checkInner);
+
+    card.appendChild(el('div', { class: 'habit-head' }, [
+      el('div', { class: 'habit-emoji', text: h.emoji, 'aria-hidden': 'true' }),
+      el('div', { class: 'grow' }, [
+        el('div', { class: 'row-between' }, [
+          el('h3', { class: 'habit-title truncate', text: h.name }),
+          h.type !== 'simple' && !done ? el('span', { class: 'tiny dim num', text: progressText(h, v) }) : null
+        ]),
+        meta
+      ]),
+      check
+    ]));
+
+    /* --- progress + quick actions ------------------------------------- */
+    if (h.type !== 'simple') {
+      card.appendChild(el('div', { class: 'bar', role: 'progressbar', 'aria-valuenow': pct, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-label': h.name + ' progress' }, [
+        el('div', { class: 'bar-fill', style: 'width:' + pct + '%' })
+      ]));
+    }
+
+    var actions = el('div', { class: 'habit-actions' }, [
+      h.type !== 'simple' ? el('button', {
+        class: 'btn btn-sm', type: 'button', 'data-bump': h.id,
+        html: icon('plus', 14) + '<span>Log one</span>'
+      }) : null,
+      h.type !== 'simple' && v > 0 ? el('button', {
+        class: 'btn btn-sm btn-ghost', type: 'button', 'data-undo': h.id, title: 'Remove the last entry',
+        html: icon('minus', 14) + '<span>Undo</span>'
+      }) : null,
+      el('span', { class: 'grow' }),
+      el('button', {
+        class: 'icon-btn', type: 'button', 'data-edit': h.id, title: 'Edit habit', 'aria-label': 'Edit ' + h.name,
+        html: icon('pencil', 16)
+      }),
+      el('button', {
+        class: 'icon-btn', type: 'button', 'data-toggle-heat': h.id, title: 'Show calendar heatmap',
+        'aria-label': 'Toggle heatmap for ' + h.name, 'aria-expanded': ui.openHeat[h.id] ? 'true' : 'false',
+        html: icon('grid', 16)
+      }),
+      el('button', {
+        class: 'icon-btn is-danger', type: 'button', 'data-del': h.id, title: 'Delete habit',
+        'aria-label': 'Delete ' + h.name, html: icon('trash', 16)
+      })
+    ]);
+    card.appendChild(actions);
+
+    /* --- heatmap ------------------------------------------------------- */
+    if (ui.openHeat[h.id]) {
+      card.appendChild(heatmapBlock(h, ui.heatWeeks));
+    } else {
+      card.appendChild(el('div', { class: 'heat', style: '--hc:' + h.color }, [
+        heatmapBlock(h, 8, 'heat-mini')
+      ]));
+    }
+
+    return card;
+  }
+
+  /* ============================================================ today view = */
+
+  function renderToday() {
+    var host = $('#view-today');
+    clear(host);
+
+    var active = habits();
+    var o = E.overall(active, store.entries, today());
+    var now = E.keyToDate(today());
+
+    /* headline */
+    host.appendChild(el('div', { class: 'page-head' }, [
+      el('div', {}, [
+        el('h1', { class: 'page-title', text: now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }) }),
+        el('p', { class: 'page-sub', text: active.length
+          ? (o.todayScheduled === 0 ? 'Nothing scheduled today.' : o.todayDone + ' of ' + o.todayScheduled + ' done today.')
+          : 'Add your first habit to get started.' })
+      ]),
+      el('div', { class: 'row' }, [
+        el('button', {
+          class: 'btn btn-primary', type: 'button', 'data-new': '1',
+          html: icon('plus', 17) + '<span>New habit</span>'
+        })
+      ])
+    ]));
+
+    /* stat tiles */
+    var tiles = el('div', { class: 'stats' });
+    function tile(label, value, foot, extra) {
+      tiles.appendChild(el('div', { class: 'stat' }, [
+        el('div', { class: 'stat-label', text: label }),
+        el('div', { class: 'stat-value' }, [
+          el('span', { text: value }),
+          extra ? el('small', { text: extra }) : null
+        ]),
+        el('div', { class: 'stat-foot', text: foot })
+      ]));
+    }
+
+    tile('Today', o.todayScheduled ? o.todayDone + '/' + o.todayScheduled : '0',
+      o.todayScheduled ? Math.round((o.todayRate || 0) * 100) + '% complete' : 'No habits due');
+    tile('Perfect-day streak', String(o.perfectStreak),
+      o.perfectStreak === 1 ? 'day with everything done' : 'days with everything done');
+    tile('Longest streak', String(o.best),
+      o.bestHabit ? 'on ' + o.bestHabit : 'no streak yet');
+    tile('Last 30 days', o.avg30 === null ? '—' : Math.round(o.avg30 * 100) + '%',
+      o.totalChecks + ' check-ins all time');
+    host.appendChild(tiles);
+
+    /* toolbar */
+    var cats = categories();
+    var toolbar = el('div', { class: 'toolbar' }, [
+      el('label', { class: 'search' }, [
+        el('span', { html: icon('target', 16), style: 'display:flex' }),
+        el('input', {
+          type: 'search', placeholder: 'Search habits…', value: ui.query,
+          'aria-label': 'Search habits', oninput: function () { ui.query = this.value; renderList(); }
+        })
+      ]),
+      cats.length > 1 ? el('select', {
+        class: 'control', 'aria-label': 'Filter by category', onchange: function () { ui.habitFilter = this.value; renderList(); }
+      }, [el('option', { value: 'all', text: 'All categories' })].concat(cats.map(function (c) {
+        return el('option', { value: c, text: c, selected: ui.habitFilter === c });
+      }))) : null,
+      el('span', { class: 'grow' }),
+      el('div', { class: 'seg', role: 'group', 'aria-label': 'Heatmap length' }, [
+        segBtn('8 weeks', ui.heatWeeks === 8, function () { ui.heatWeeks = 8; renderList(); }),
+        segBtn('26 weeks', ui.heatWeeks === 26, function () { ui.heatWeeks = 26; renderList(); }),
+        segBtn('1 year', ui.heatWeeks === 53, function () { ui.heatWeeks = 53; renderList(); })
+      ])
+    ]);
+    host.appendChild(toolbar);
+
+    var listHost = el('div', { class: 'habits', id: 'habit-list' });
+    host.appendChild(listHost);
+    renderList();
+  }
+
+  function segBtn(label, on, onclick) {
+    return el('button', { class: 'seg-btn', type: 'button', 'aria-pressed': on ? 'true' : 'false', text: label, onclick: onclick });
+  }
+
+  function renderList() {
+    var host = $('#habit-list');
+    if (!host) return;
+    clear(host);
+    var list = visibleHabits();
+
+    if (!habits().length) {
+      host.appendChild(el('div', { class: 'empty' }, [
+        el('div', { class: 'empty-mark', html: icon('sparkle', 24), style: 'display:grid' }),
+        el('h3', { text: 'No habits yet' }),
+        el('p', { text: 'Pick one small thing you want to do every day. One tap to check it off, and your streak starts building.' }),
+        el('button', { class: 'btn btn-primary btn-lg', type: 'button', 'data-new': '1', html: icon('plus', 17) + '<span>Create your first habit</span>' })
+      ]));
+      return;
+    }
+
+    if (!list.length) {
+      host.appendChild(el('div', { class: 'empty' }, [
+        el('div', { class: 'empty-mark', html: icon('target', 24), style: 'display:grid' }),
+        el('h3', { text: 'Nothing matches' }),
+        el('p', { text: 'Try a different search term or category filter.' })
+      ]));
+      return;
+    }
+
+    list.forEach(function (h) { host.appendChild(habitCard(h)); });
+    host.appendChild(el('button', { class: 'btn btn-lg', type: 'button', 'data-new': '1', style: 'grid-column:1/-1', html: icon('plus', 17) + '<span>Add another habit</span>' }));
+  }
+
+  /* ========================================================= calendar view = */
+
+  function renderCalendar() {
+    var host = $('#view-calendar');
+    clear(host);
+
+    var ws = store.settings.weekStart;
+    var grid = E.monthGrid(ui.month, ws);
+    var active = habits();
+
+    /* header */
+    host.appendChild(el('div', { class: 'page-head' }, [
+      el('div', {}, [
+        el('h1', { class: 'page-title', text: E.monthLabel(ui.month) }),
+        el('p', { class: 'page-sub', text: 'Your whole history, day by day. Tap any day to see or edit it.' })
+      ]),
+      el('div', { class: 'cal-nav' }, [
+        el('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Previous month', html: icon('chevronLeft', 18), 'data-month': '-1' }),
+        el('button', { class: 'btn btn-sm', type: 'button', text: 'Today', 'data-month': 'today' }),
+        el('button', { class: 'btn btn-icon', type: 'button', 'aria-label': 'Next month', html: icon('chevronRight', 18), 'data-month': '1' })
+      ])
+    ]));
+
+    var wrap = el('div', { class: 'cal-wrap' });
+
+    /* month panel */
+    var panel = el('div', { class: 'panel' });
+    var dow = el('div', { class: 'cal-dow' });
+    for (var i = 0; i < 7; i++) dow.appendChild(el('span', { text: WEEK_LABELS[(ws + i) % 7] }));
+    panel.appendChild(dow);
+
+    var calGrid = el('div', { class: 'cal-grid' });
+    grid.weeks.forEach(function (week) {
+      week.forEach(function (cell) {
+        calGrid.appendChild(calendarDay(cell, active));
+      });
+    });
+    panel.appendChild(calGrid);
+
+    /* dots legend */
+    panel.appendChild(el('div', { class: 'heat-foot' }, [
+      el('span', { class: 'tiny dim', text: 'Each dot is one habit · filled = done that day · ring = share of habits completed' })
+    ]));
+
+    wrap.appendChild(panel);
+    wrap.appendChild(dayPanel(active));
+    host.appendChild(wrap);
+
+    /* year overview */
+    host.appendChild(el('div', { class: 'section' }, [
+      el('div', { class: 'row-between', style: 'margin-bottom:12px' }, [
+        el('div', {}, [
+          el('div', { class: 'section-title', text: 'Year in review' }),
+          el('div', { class: 'section-sub', text: 'Every day you showed up, for the last 12 months.' })
+        ]),
+        el('select', {
+          class: 'control', 'aria-label': 'Habit shown in year overview',
+          onchange: function () { ui.yearHabit = this.value; renderCalendar(); }
+        }, [el('option', { value: 'all', text: 'All habits', selected: ui.yearHabit === 'all' })].concat(
+          habits().map(function (h) {
+            return el('option', { value: h.id, text: h.emoji + ' ' + h.name, selected: ui.yearHabit === h.id });
+          })))
+      ]),
+      el('div', { class: 'panel year-heat', style: '--hc:' + yearColor() }, [
+        yearHeatBlock()
+      ])
+    ]));
+
+    host.appendChild(el('div', { class: 'section' }, [
+      el('div', { class: 'row-between', style: 'margin-bottom:12px' }, [
+        el('div', {}, [
+          el('div', { class: 'section-title', text: 'All habits' }),
+          el('div', { class: 'section-sub', text: active.length + ' active' })
+        ])
+      ]),
+      el('div', { class: 'habits' }, active.map(function (h) {
+        var st = E.stats(h, store.entries, today());
+        return el('div', { class: 'panel', style: '--hc:' + h.color }, [
+          el('div', { class: 'row-between', style: 'margin-bottom:10px' }, [
+            el('div', { class: 'row' }, [
+              el('div', { class: 'habit-emoji', text: h.emoji, 'aria-hidden': 'true', style: 'width:32px;height:32px;font-size:16px' }),
+              el('div', {}, [
+                el('div', { class: 'bold small', text: h.name }),
+                el('div', { class: 'tiny dim', text: (st.rate === null ? 'no history' : Math.round(st.rate * 100) + '% success') + ' · best ' + st.best })
+              ])
+            ]),
+            el('span', { class: 'streak-pill' + (st.current ? '' : ' is-cold') }, [
+              el('span', { html: icon('flame', 13), style: 'display:flex' }),
+              el('span', { text: String(st.current) })
+            ])
+          ]),
+          heatmapBlock(h, 26, 'heat-mini')
+        ]);
+      }))
+    ]));
+  }
+
+  function yearColor() {
+    if (ui.yearHabit === 'all') return 'var(--text-2)';
+    var h = find(ui.yearHabit);
+    return h ? h.color : 'var(--text-2)';
+  }
+
+  function yearHeatBlock() {
+    var habit = ui.yearHabit === 'all' ? null : find(ui.yearHabit);
+    var map = E.heatmap(habits(), store.entries, {
+      end: today(), weeks: 53, weekStart: store.settings.weekStart, habit: habit, today: today()
+    });
+
+    var monthRow = el('div', { class: 'heat-months' });
+    var lastMonth = -1;
+    map.weeks.forEach(function (col) {
+      var d = E.keyToDate(col[0].day);
+      var label = '';
+      if (d.getMonth() !== lastMonth && E.keyToDate(col[0].day).getDate() <= 14) {
+        label = MONTHS_SHORT[d.getMonth()];
+        lastMonth = d.getMonth();
+      }
+      monthRow.appendChild(el('span', { text: label }));
+    });
+
+    var dayCol = el('div', { class: 'heat-days' });
+    var ws = store.settings.weekStart;
+    for (var i = 0; i < 7; i++) {
+      var wd = (ws + i) % 7;
+      dayCol.appendChild(el('span', { text: (wd === 1 || wd === 3 || wd === 5) ? WEEK_LABELS[wd] : '' }));
+    }
+
+    var grid = el('div', { class: 'heat-grid' });
+    map.weeks.forEach(function (col) {
+      var colEl = el('div', { class: 'heat-col' });
+      col.forEach(function (cell) {
+        var classes = ['heat-cell'];
+        if (cell.level === -1) classes.push('is-empty');
+        else classes.push('is-l' + cell.level);
+        if (cell.future) classes.push('is-future');
+        if (cell.day === today()) classes.push('is-today');
+        var label = E.humanDate(cell.day) + (cell.frac === null ? ' — no habits' : ' — ' + Math.round(cell.frac * 100) + '%');
+        colEl.appendChild(el('button', {
+          class: classes.join(' '), type: 'button', title: label, 'aria-label': label,
+          'data-day': cell.day, 'data-open-day': '1', 'data-heat': '1'
+        }));
+      });
+      grid.appendChild(colEl);
+    });
+
+    return el('div', {}, [
+      monthRow,
+      el('div', { class: 'heat-body' }, [dayCol, grid])
+    ]);
+  }
+
+  function calendarDay(cell, active) {
+    var day = cell.day;
+    var sum = E.daySummary(active, store.entries, day);
+    var isFuture = E.diffDays(day, today()) > 0;
+    var pct = sum.scheduled ? sum.done / sum.scheduled : 0;
+    var perfect = sum.scheduled > 0 && sum.done >= sum.scheduled;
+
+    var node = el('button', {
+      class: 'cal-day' + (cell.inMonth ? '' : ' is-out') + (day === today() ? ' is-today' : '') +
+             (day === ui.selectedDay ? ' is-selected' : '') + (perfect ? ' is-perfect' : ''),
+      type: 'button',
+      'data-day': day,
+      'data-open-day': '1',
+      style: '--hc:' + (perfect ? '#22c55e' : 'var(--text-3)'),
+      'aria-label': E.humanDate(day) + ': ' + sum.done + ' of ' + sum.scheduled + ' habits done',
+      title: E.humanDate(day) + ' — ' + sum.done + '/' + sum.scheduled
+    });
+
+    node.appendChild(el('span', { class: 'num', text: String(E.keyToDate(day).getDate()) }));
+
+    if (sum.scheduled) {
+      node.appendChild(el('span', { class: 'cal-ring', style: '--p:' + pct.toFixed(2) }, [el('i', {})]));
+    } else if (!isFuture) {
+      node.appendChild(el('span', { class: 'cal-dots' }));
+    }
+
+    if (!isFuture && sum.scheduled) {
+      var dots = el('span', { class: 'cal-dots' });
+      active.slice(0, 6).forEach(function (h) {
+        if (!E.scheduledOn(h, day)) return;
+        var done = E.isComplete(h, store.entries, day);
+        dots.appendChild(el('i', {
+          class: 'cal-dot' + (done ? ' is-done' : ' is-missed'),
+          style: '--hc:' + h.color,
+          title: h.name + (done ? ' — done' : ' — missed')
+        }));
+      });
+      node.appendChild(dots);
+    }
+
+    return node;
+  }
+
+  function dayPanel(active) {
+    var day = ui.selectedDay;
+    var isFuture = E.diffDays(day, today()) > 0;
+    var sum = E.daySummary(active, store.entries, day);
+
+    var panel = el('div', { class: 'panel' }, [
+      el('div', { class: 'row-between' }, [
+        el('div', {}, [
+          el('div', { class: 'bold', text: E.humanDate(day) }),
+          el('div', { class: 'tiny dim', text: isFuture ? 'In the future' : sum.done + ' of ' + sum.scheduled + ' completed' })
+        ]),
+        day === today() ? el('span', { class: 'chip', text: 'Today' }) : null
+      ])
+    ]);
+
+    if (!active.length) {
+      panel.appendChild(el('p', { class: 'small muted', style: 'margin-top:12px', text: 'No habits yet.' }));
+      return panel;
+    }
+
+    var list = el('div', { class: 'day-list' });
+    active.forEach(function (h) {
+      var scheduled = E.scheduledOn(h, day);
+      var done = scheduled && E.isComplete(h, store.entries, day);
+      var v = E.getValue(store.entries, h.id, day);
+      var item = el('button', {
+        class: 'day-item' + (done ? ' is-done' : ''),
+        type: 'button',
+        style: '--hc:' + h.color,
+        'data-day-toggle': h.id,
+        'data-day': day,
+        disabled: !scheduled || isFuture,
+        title: !scheduled ? 'Not scheduled that day' : isFuture ? 'Not yet' : (done ? 'Tap to undo' : 'Tap to complete')
+      }, [
+        el('span', { class: 'day-tick', html: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">' + ICONS.check + '</svg>' }),
+        el('span', { class: 'habit-emoji', text: h.emoji, 'aria-hidden': 'true', style: 'width:26px;height:26px;font-size:14px;border-radius:8px' }),
+        el('span', { class: 'grow' }, [
+          el('div', { class: 'small bold truncate', text: h.name }),
+          el('div', { class: 'tiny dim', text: !scheduled ? 'not scheduled' : (h.type === 'simple' ? (done ? 'done' : 'not done') : progressText(h, v) || 'not done') })
+        ])
+      ]);
+      list.appendChild(item);
+    });
+    panel.appendChild(list);
+
+    if (!isFuture && sum.scheduled) {
+      var pct = Math.round((sum.done / sum.scheduled) * 100);
+      panel.appendChild(el('div', { style: 'margin-top:14px' }, [
+        el('div', { class: 'bar', style: '--hc:var(--text-2)' }, [el('div', { class: 'bar-fill', style: 'width:' + pct + '%' })]),
+        el('div', { class: 'tiny dim', style: 'margin-top:6px', text: pct + '% of the day completed' })
+      ]));
+    }
+
+    return panel;
+  }
+
+  /* ============================================================ habit form = */
+
+  var EMOJIS = ('✅ 💧 📚 🧘 💪 🏃 🚶 🚴 🏊 🥗 🍎 ☕ 😴 🛏️ 🌙 ☀️ 🦷 🧼 🧹 🧺 💊 🩺 📝 ✍️ 🎯 🎸 🎨 🎧 🎹 📷 ' +
+    '💻 ⌨️ 📖 🗣️ 🧠 🙏 🌱 🌿 🚭 🍭 🍫 🚰 🥤 🧊 🧴 💰 📈 🧾 📅 ⏰ 🔥 ⭐ 🌟 🏆 🎓 🧑‍🍳 🐶 🚿 🧳 ✈️ 🚗 🌳 🏋️ 🤸 🧗 ⛰️ 🎾 ⚽ 🏀 🥊 🛹 🎳 🃏 ♟️ 🧩 🔤 🔢 🧪 🎻 🥁 📞 👨‍👩‍👧 💬 😊 🚫 🍵 🥦 🍳 🛒').split(' ');
+
+  function openHabitForm(mode, habitId) {
+    ui.formMode = mode;
+    if (mode === 'edit') {
+      var h = find(habitId);
+      if (!h) return;
+      ui.form = {
+        id: h.id, name: h.name, emoji: h.emoji, color: h.color, type: h.type,
+        target: h.target, unit: h.unit, schedule: h.schedule, weekdays: h.weekdays.slice(),
+        category: h.category || '', archived: !!h.archived
+      };
+    } else {
+      ui.form = {
+        id: null, name: '', emoji: '✅',
+        color: E.PALETTE[store.habits.length % E.PALETTE.length],
+        type: 'simple', target: 1, unit: 'reps',
+        schedule: 'daily', weekdays: [0, 1, 2, 3, 4, 5, 6], category: '', archived: false
+      };
+    }
+    renderForm();
+  }
+
+  function renderForm() {
+    var f = ui.form;
+    var isNew = ui.formMode === 'new';
+    var body = el('div', { class: 'modal-body' });
+
+    /* name */
+    body.appendChild(el('div', { class: 'field' }, [
+      el('label', { for: 'f-name', text: 'Habit name' }),
+      el('input', {
+        class: 'input', id: 'f-name', type: 'text', maxlength: '60', placeholder: 'e.g. Drink water',
+        value: f.name, autofocus: true,
+        oninput: function () { f.name = this.value; hideError(); }
+      })
+    ]));
+
+    /* type */
+    var types = [
+      { id: 'simple', label: 'Simple', hint: 'Done or not — one tap' },
+      { id: 'goal', label: 'Daily target', hint: 'e.g. 20 pages a day' },
+      { id: 'count', label: 'Count', hint: 'Every rep adds up' }
+    ];
+    body.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: 'How do you want to track it?' }),
+      el('div', { class: 'type-pick' }, types.map(function (t) {
+        return el('button', {
+          class: 'type-card', type: 'button', 'aria-pressed': f.type === t.id ? 'true' : 'false',
+          onclick: function () {
+            f.type = t.id;
+            if (t.id === 'goal' && f.unit === 'reps') f.unit = 'units';
+            if (t.id === 'simple') { f.target = 1; }
+            if (t.id === 'count') { f.target = 1; if (f.unit === 'units') f.unit = 'reps'; }
+            if (t.id !== 'simple' && !f.target) f.target = 1;
+            renderForm();
+          }
+        }, [el('strong', { text: t.label }), el('span', { text: t.hint })]);
+      }))
+    ]));
+
+    /* target + unit */
+    if (f.type !== 'simple') {
+      body.appendChild(el('div', { class: 'field grid-2' }, [
+        el('div', {}, [
+          el('label', { for: 'f-target', text: f.type === 'goal' ? 'Daily target' : 'Step size per tap' }),
+          el('input', {
+            class: 'input', id: 'f-target', type: 'number', min: '1', max: '9999', inputmode: 'numeric', value: f.target,
+            oninput: function () { f.target = Math.max(1, Math.min(9999, Math.round(Number(this.value) || 1))); }
+          })
+        ]),
+        el('div', {}, [
+          el('label', { for: 'f-unit', text: 'Unit' }),
+          el('input', {
+            class: 'input', id: 'f-unit', type: 'text', maxlength: '12', value: f.unit, placeholder: 'pages',
+            oninput: function () { f.unit = this.value; }
+          })
+        ])
+      ]));
+    }
+
+    /* schedule */
+    body.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: 'Repeat' }),
+      el('div', { class: 'seg', style: 'width:100%' }, [
+        el('button', {
+          class: 'seg-btn', type: 'button', 'aria-pressed': f.schedule === 'daily' ? 'true' : 'false',
+          text: 'Every day', style: 'flex:1', onclick: function () { f.schedule = 'daily'; renderForm(); }
+        }),
+        el('button', {
+          class: 'seg-btn', type: 'button', 'aria-pressed': f.schedule === 'weekly' ? 'true' : 'false',
+          text: 'Specific days', style: 'flex:1',
+          onclick: function () { f.schedule = 'weekly'; if (f.weekdays.length === 7) f.weekdays = [1, 2, 3, 4, 5]; renderForm(); }
+        })
+      ])
+    ]));
+
+    if (f.schedule === 'weekly') {
+      body.appendChild(el('div', { class: 'field' }, [
+        el('label', { text: 'On these days' }),
+        el('div', { class: 'weekday-pick' }, [0, 1, 2, 3, 4, 5, 6].map(function (d) {
+          return el('button', {
+            class: 'wd', type: 'button', 'aria-pressed': f.weekdays.indexOf(d) >= 0 ? 'true' : 'false',
+            text: WEEK_LABELS[d], 'aria-label': ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d],
+            onclick: function () {
+              var i = f.weekdays.indexOf(d);
+              if (i >= 0) f.weekdays.splice(i, 1);
+              else f.weekdays.push(d);
+              if (!f.weekdays.length) f.weekdays = [d];
+              renderForm();
+            }
+          });
+        }))
+      ]));
+    }
+
+    /* emoji */
+    body.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: 'Icon' }),
+      el('div', { class: 'emoji-grid' }, EMOJIS.map(function (e) {
+        return el('button', {
+          class: 'emoji-btn', type: 'button', text: e, 'aria-pressed': f.emoji === e ? 'true' : 'false',
+          'aria-label': 'Icon ' + e, onclick: function () { f.emoji = e; renderForm(); }
+        });
+      }))
+    ]));
+
+    /* colour */
+    body.appendChild(el('div', { class: 'field' }, [
+      el('label', { text: 'Colour' }),
+      el('div', { class: 'swatches' }, E.PALETTE.map(function (c) {
+        return el('button', {
+          class: 'swatch', type: 'button', style: 'background:' + c, 'aria-pressed': f.color === c ? 'true' : 'false',
+          'aria-label': 'Colour ' + c, onclick: function () { f.color = c; renderForm(); }
+        });
+      }))
+    ]));
+
+    /* category */
+    body.appendChild(el('div', { class: 'field' }, [
+      el('label', { for: 'f-cat', text: 'Category (optional)' }),
+      el('input', {
+        class: 'input', id: 'f-cat', type: 'text', maxlength: '24', value: f.category, placeholder: 'Health',
+        list: 'cat-list', oninput: function () { f.category = this.value; }
+      }),
+      el('datalist', { id: 'cat-list' }, categories().map(function (c) { return el('option', { value: c }); }))
+    ]));
+
+    var err = el('div', { class: 'field', id: 'form-error', hidden: true }, [
+      el('p', { class: 'small', style: 'color:var(--danger)' })
+    ]);
+    function showError(msg) {
+      err.hidden = false;
+      $('p', err).textContent = msg;
+      $('.input', body).focus();
+    }
+    function hideError() { err.hidden = true; }
+    body.appendChild(err);
+
+    var node = el('div', { class: 'modal modal-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': isNew ? 'New habit' : 'Edit habit' }, [
+      el('div', { class: 'modal-head' }, [
+        el('h2', { class: 'modal-title', text: isNew ? 'New habit' : 'Edit habit' }),
+        el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', html: icon('x', 18), onclick: closeModal })
+      ]),
+      body,
+      el('div', { class: 'modal-foot' }, [
+        !isNew ? el('button', {
+          class: 'btn btn-ghost', type: 'button', text: find(f.id) && find(f.id).archived ? 'Unarchive' : 'Archive',
+          title: find(f.id) && find(f.id).archived ? 'Show this habit in the list again' : 'Hide from the list but keep its history',
+          onclick: function () {
+            var h = find(f.id);
+            if (!h) return;
+            if (h.archived) {
+              h.archived = false;
+              touch(h);
+              tick(); save(); closeModal(); render();
+              toast('“' + h.name + '” is active again');
+            } else {
+              h.archived = true;
+              touch(h);
+              tick(); save(); closeModal(); render();
+              toast('Archived “' + h.name + '”', { label: 'Undo', run: function () { h.archived = false; touch(h); tick(); save(); render(); } });
+            }
+          }
+        }) : null,
+        el('span', { class: 'grow' }),
+        el('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: closeModal }),
+        el('button', {
+          class: 'btn btn-primary', type: 'button', text: isNew ? 'Create habit' : 'Save changes',
+          onclick: function () {
+            var name = f.name.trim();
+            if (!name) { showError('Give your habit a name.'); return; }
+            var exists = store.habits.some(function (h) {
+              return h.id !== f.id && !h.archived && h.name.toLowerCase() === name.toLowerCase();
+            });
+            if (exists) { showError('You already have a habit called “' + name + '”.'); return; }
+
+            if (isNew) {
+              var habit = E.normalizeHabit({
+                id: E.uid(), name: name, emoji: f.emoji, color: f.color, type: f.type,
+                target: f.type === 'simple' ? 1 : f.target, unit: f.unit,
+                schedule: f.schedule, weekdays: f.weekdays, category: f.category.trim(),
+                createdAt: today(), updatedAt: Date.now()
+              }, today());
+              store.habits.push(habit);
+              tick();
+              save(); closeModal(); render();
+              toast('“' + habit.name + '” created');
+            } else {
+              var target = find(f.id);
+              if (!target) return;
+              target.name = name;
+              target.emoji = f.emoji;
+              target.color = f.color;
+              target.type = f.type;
+              target.target = f.type === 'simple' ? 1 : f.target;
+              target.unit = f.unit;
+              target.schedule = f.schedule;
+              target.weekdays = f.weekdays.slice().sort(function (a, b) { return a - b; });
+              target.category = f.category.trim();
+              touch(target);
+              tick();
+              save(); closeModal(); render();
+              toast('Saved');
+            }
+          }
+        })
+      ])
+    ]);
+
+    var modal = el('div', {}, [node]);
+    openModal(node, { onScrim: closeModal });
+    var nameInput = $('#f-name', node);
+    if (nameInput) nameInput.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); $('.btn-primary', node).click(); }
+    });
+  }
+
+  /* ============================================================== settings = */
+
+  function settingsTabs() {
+    return [
+      { id: 'app', label: 'App', icon: 'settings' },
+      { id: 'cloud', label: 'Sync', icon: 'cloud' },
+      { id: 'data', label: 'Data', icon: 'download' }
+    ];
+  }
+
+  function openSettings() {
+    var s = store.settings;
+    var tabs = settingsTabs();
+
+    var body = el('div', { class: 'modal-body' }, [
+      el('div', { class: 'tabs', role: 'tablist', 'aria-label': 'Settings sections' }, tabs.map(function (t) {
+        return el('button', {
+          class: 'tab', type: 'button', role: 'tab', 'data-tab': t.id,
+          'aria-selected': ui.settingsTab === t.id ? 'true' : 'false',
+          html: icon(t.icon, 15) + '<span>' + t.label + '</span>',
+          onclick: function () { ui.settingsTab = t.id; ui.syncNote = null; openSettings(); }
+        });
+      })),
+      ui.settingsTab === 'cloud' ? cloudPanel() :
+        ui.settingsTab === 'data' ? dataPanel() : appPanel(s)
+    ]);
+
+    var node = el('div', { class: 'modal modal-wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Settings' }, [
+      el('div', { class: 'modal-head' }, [
+        el('h2', { class: 'modal-title', text: 'Settings' }),
+        el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', html: icon('x', 18), onclick: closeModal })
+      ]),
+      body
+    ]);
+    openModal(node);
+  }
+
+  function note() {
+    if (!ui.syncNote) return null;
+    return el('div', { class: 'note is-' + (ui.syncNote.tone || 'info') }, [
+      el('span', { html: icon(ui.syncNote.tone === 'error' ? 'x' : 'lock', 15), style: 'display:flex;margin-top:1px' }),
+      el('span', { text: ui.syncNote.text })
+    ]);
+  }
+
+  /* --- App tab --------------------------------------------------------- */
+
+  function appPanel(s) {
+    return el('div', {}, [
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Your data stays here' }),
+          el('div', { class: 'set-hint', text: 'No account, no tracking. Habits live in this browser’s storage on this device — and in your own Firebase room if you turn on sync.' })
+        ]),
+        el('span', { html: icon('lock', 18), style: 'display:flex;color:var(--text-3)' })
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Appearance' }),
+          el('div', { class: 'set-hint', text: 'Switch between the dark and light theme.' })
+        ]),
+        el('div', { class: 'seg' }, [
+          el('button', {
+            class: 'seg-btn', type: 'button', 'aria-pressed': s.theme === 'dark' ? 'true' : 'false',
+            html: icon('moon', 14) + '<span>Dark</span>',
+            onclick: function () { applyTheme('dark'); openSettings(); }
+          }),
+          el('button', {
+            class: 'seg-btn', type: 'button', 'aria-pressed': s.theme === 'light' ? 'true' : 'false',
+            html: icon('sun', 14) + '<span>Light</span>',
+            onclick: function () { applyTheme('light'); openSettings(); }
+          })
+        ])
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Week starts on' }),
+          el('div', { class: 'set-hint', text: 'Changes the layout of the heatmaps and calendar. This setting syncs.' })
+        ]),
+        el('div', { class: 'seg' }, [
+          el('button', {
+            class: 'seg-btn', type: 'button', 'aria-pressed': s.weekStart === 1 ? 'true' : 'false', text: 'Monday',
+            onclick: function () { s.weekStart = 1; tick(); save(); render(); openSettings(); }
+          }),
+          el('button', {
+            class: 'seg-btn', type: 'button', 'aria-pressed': s.weekStart === 0 ? 'true' : 'false', text: 'Sunday',
+            onclick: function () { s.weekStart = 0; tick(); save(); render(); openSettings(); }
+          })
+        ])
+      ]),
+
+      store.habits.some(function (h) { return h.archived; }) ? el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Archived habits' }),
+          el('div', { class: 'set-hint', text: 'Show habits you archived, so you can unarchive or delete them.' })
+        ]),
+        el('button', {
+          class: 'chip', type: 'button', 'aria-pressed': s.showArchived ? 'true' : 'false',
+          text: s.showArchived ? 'Showing' : 'Hidden',
+          onclick: function () { s.showArchived = !s.showArchived; tick(); save(); render(); openSettings(); }
+        })
+      ]) : null,
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'This device' }),
+          el('div', { class: 'set-hint', text: 'Devices are told apart so edits can be merged without guessing.' })
+        ]),
+        el('code', { class: 'code-inline', text: (s.cloud && s.cloud.device) || deviceName() })
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Keyboard' }),
+          el('div', { class: 'set-hint', text: 'N new habit · T today · C calendar · Esc close' })
+        ])
+      ])
+    ]);
+  }
+
+  /* --- Data tab -------------------------------------------------------- */
+
+  function dataPanel() {
+    return el('div', {}, [
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Export backup' }),
+          el('div', { class: 'set-hint', text: 'Download a JSON file with every habit and check-in.' })
+        ]),
+        el('button', { class: 'btn btn-sm', type: 'button', html: icon('download', 15) + '<span>Export</span>', onclick: exportData })
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Import backup' }),
+          el('div', { class: 'set-hint', text: 'Restore from a file you exported earlier. This replaces what is here now.' })
+        ]),
+        el('button', { class: 'btn btn-sm', type: 'button', html: icon('upload', 15) + '<span>Import</span>', onclick: importData })
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'What is stored' }),
+          el('div', { class: 'set-hint', text: habitCount() + ' habits · ' +
+            E.overall(habits(), store.entries, today()).totalChecks + ' check-ins · ' + storageSize() + ' on this device' })
+        ])
+      ]),
+
+      el('div', { class: 'danger-zone' }, [
+        el('h4', { text: 'Danger zone' }),
+        el('div', { class: 'set-row' }, [
+          el('div', {}, [
+            el('div', { class: 'set-label', text: 'Delete everything' }),
+            el('div', { class: 'set-hint', text: 'Permanently removes all habits and history from this device.' })
+          ]),
+          el('button', {
+            class: 'btn btn-sm btn-danger', type: 'button', text: 'Delete all',
+            onclick: function () {
+              closeModal();
+              confirmModal({
+                title: 'Delete everything?',
+                body: 'All habits and every check-in will be erased from this device. This cannot be undone — export a backup first if you might want it back. If sync is on, the deletion will reach your other devices too.',
+                confirmLabel: 'Delete everything', danger: true,
+                onConfirm: function () {
+                  var cloudCfg = store.settings.cloud;
+                  var device = store.deviceId;
+                  var config = cloud.config;
+                  // Tombstone every habit so the wipe propagates instead of being
+                  // undone by the next merge with a device that still has them.
+                  var deleted = store.deleted || {};
+                  store.habits.forEach(function (h) { deleted[h.id] = Date.now(); });
+                  store = E.emptyState();
+                  store.deviceId = device || E.newDeviceId();
+                  store.settings.cloud = cloudCfg || E.emptyCloud();
+                  store.settings.seeded = true;
+                  store.deleted = deleted;
+                  cloud.config = config;
+                  ensureIdentity();
+                  tick();
+                  saveNow();
+                  if (cloudReady()) cloud.transport.push(docForCloud());
+                  render();
+                  toast('Everything deleted');
+                }
+              });
+            }
+          })
+        ])
+      ])
+    ]);
+  }
+
+  function habitCount() {
+    var n = habits().length;
+    return n + (n === 1 ? ' habit' : ' habits');
+  }
+
+  function storageSize() {
+    try {
+      var raw = localStorage.getItem(LS_KEY) || '';
+      var kb = raw.length / 1024;
+      return kb < 1024 ? kb.toFixed(1) + ' KB' : (kb / 1024).toFixed(1) + ' MB';
+    } catch (err) { return 'unknown size'; }
+  }
+
+  /* --- Sync tab -------------------------------------------------------- */
+
+  function cloudPanel() {
+    var s = store.settings;
+    var on = s.cloud && s.cloud.enabled;
+
+    if (!Cloud) {
+      return el('div', {}, [
+        note(),
+        el('p', { class: 'small muted', text: 'The sync module did not load, so cloud sync is unavailable in this copy.' })
+      ]);
+    }
+
+    return on ? cloudConnectedPanel(s) : cloudSetupPanel(s);
+  }
+
+  function cloudSetupPanel(s) {
+    var hasConfig = !!cloud.config;
+
+    return el('div', {}, [
+      note(),
+
+      el('div', { class: 'note is-info' }, [
+        el('span', { html: icon('lock', 15), style: 'display:flex;margin-top:1px' }),
+        el('span', {
+          text: 'Sync stores your habits in your own free Firebase Realtime Database. There is no account: ' +
+            'a long random sync code keeps the room private, and you paste that code into your other devices once. ' +
+            'Treat it like a password — anyone who has the code can read and edit your habits.'
+        })
+      ]),
+
+      /* step 1: config */
+      el('div', { class: 'step' }, [
+        el('div', { class: 'step-head' }, [
+          el('span', { class: 'step-num', text: '1' }),
+          el('div', {}, [
+            el('div', { class: 'set-label', text: hasConfig ? 'Firebase config — connected' : 'Paste your Firebase config' }),
+            el('div', { class: 'set-hint', text: hasConfig
+              ? 'Saved on this device. ' + cloud.config.databaseURL.replace(/^https:\/\//, '')
+              : 'Firebase console → Project settings → Your apps → SDK setup. Copy the firebaseConfig object.' })
+          ])
+        ]),
+        hasConfig ? el('div', { class: 'row', style: 'margin-top:10px' }, [
+          el('button', {
+            class: 'btn btn-sm', type: 'button', text: 'Replace config',
+            onclick: function () { cloud.config = null; saveConfig(null); openSettings(); }
+          })
+        ]) : el('div', {}, [
+          el('textarea', {
+            class: 'input', rows: '5', placeholder: '{\n  "apiKey": "AIza…",\n  "databaseURL": "https://your-project-default-rtdb.firebaseio.com"\n}',
+            value: ui.configDraft,
+            oninput: function () { ui.configDraft = this.value; }
+          }),
+          el('div', { class: 'row', style: 'margin-top:10px' }, [
+            el('button', {
+              class: 'btn btn-sm btn-primary', type: 'button', text: 'Save config',
+              onclick: function () {
+                var parsed = Cloud.parsePastedConfig(ui.configDraft);
+                if (parsed.error) { ui.syncNote = { tone: 'error', text: parsed.error }; openSettings(); return; }
+                cloud.config = parsed.config;
+                saveConfig(parsed.config);
+                ui.syncNote = { tone: 'ok', text: 'Config saved. Now create or enter a sync code below.' };
+                openSettings();
+              }
+            })
+          ])
+        ])
+      ]),
+
+      /* step 2: code */
+      el('div', { class: 'step' }, [
+        el('div', { class: 'step-head' }, [
+          el('span', { class: 'step-num', text: '2' }),
+          el('div', {}, [
+            el('div', { class: 'set-label', text: 'Choose a sync code' }),
+            el('div', { class: 'set-hint', text: 'Starting fresh? Generate one. Already syncing on another device? Type the code that device shows you.' })
+          ])
+        ]),
+        el('div', { class: 'row', style: 'margin-top:10px;flex-wrap:wrap' }, [
+          el('button', {
+            class: 'btn btn-sm', type: 'button', html: icon('sparkle', 15) + '<span>Generate a code</span>',
+            onclick: function () {
+              ui.codeDraft = E.newRoomCode();
+              ui.syncNote = { tone: 'info', text: 'Code ready. Give it a name below, then tap “Turn on sync”.' };
+              openSettings();
+            }
+          }),
+          el('span', { class: 'dim tiny', text: 'or' }),
+          el('input', {
+            class: 'input', style: 'flex:1 1 200px;min-width:180px;font-family:var(--mono);letter-spacing:.06em',
+            placeholder: 'K7QW3M-9XRTPB-2HJ4ND-8VZQK5', value: ui.codeDraft, spellcheck: 'false',
+            'aria-label': 'Sync code',
+            oninput: function () { ui.codeDraft = this.value; }
+          })
+        ])
+      ]),
+
+      ui.codeDraft ? el('div', { class: 'field', style: 'margin-top:16px' }, [
+        el('label', { text: 'Name this device (optional)' }),
+        el('input', {
+          class: 'input', type: 'text', maxlength: '32', value: s.cloud.device || deviceName(),
+          'aria-label': 'Device name',
+          oninput: function () { s.cloud.device = this.value; }
+        })
+      ]) : null,
+
+      el('div', { class: 'modal-actions' }, [
+        el('button', {
+          class: 'btn btn-primary', type: 'button', disabled: (!hasConfig || !ui.codeDraft) ? true : false,
+          html: icon('cloud', 16) + '<span>Turn on sync</span>',
+          onclick: function () { enableSync(ui.codeDraft, s.cloud.device || deviceName()); }
+        }),
+        el('button', {
+          class: 'btn', type: 'button', text: 'Test connection',
+          onclick: function () { testConnection(ui.codeDraft); }
+        })
+      ])
+    ]);
+  }
+
+  function cloudConnectedPanel(s) {
+    var st = cloud.status;
+    var lines = [
+      { k: 'Status', v: syncStatusLabel() + (st.lastError ? ' — ' + st.lastError : '') },
+      { k: 'Last synced', v: relativeTime(st.lastSync) },
+      { k: 'Database', v: (cloud.config ? cloud.config.databaseURL.replace(/^https:\/\//, '') : 'not configured') },
+      { k: 'Changes sent / received', v: st.pushed + ' / ' + st.received },
+      { k: 'This device', v: (s.cloud.device || deviceName()) }
+    ];
+
+    return el('div', {}, [
+      note(),
+
+      el('div', { class: 'step' }, [
+        el('div', { class: 'step-head' }, [
+          el('span', { class: 'step-num is-on', html: icon('check', 13) }),
+          el('div', {}, [
+            el('div', { class: 'set-label', text: 'Sync is on' }),
+            el('div', { class: 'set-hint', text: 'Changes travel to your other devices within a few seconds, and are saved locally first either way.' })
+          ])
+        ])
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Sync code' }),
+          el('div', { class: 'set-hint', text: 'Enter this on your other device. Treat it like a password — anyone who has it can read and edit your habits.' })
+        ]),
+        el('div', { class: 'row' }, [
+          el('code', { class: 'code-inline is-big', text: E.formatCode(s.cloud.code || '') || '—' }),
+          el('button', {
+            class: 'btn btn-sm', type: 'button', text: 'Copy',
+            onclick: function () { copyText(E.formatCode(s.cloud.code || ''), 'Sync code copied'); }
+          })
+        ])
+      ]),
+
+      el('div', { class: 'set-row' }, [
+        el('div', {}, [
+          el('div', { class: 'set-label', text: 'Devices in this room' }),
+          el('div', { class: 'set-hint', text: ui.devices
+            ? Object.keys(ui.devices).length + ' device(s) have synced here.'
+            : 'Fetch the device list to check both devices are in the same room.' })
+        ]),
+        el('div', { class: 'row' }, [
+          el('button', {
+            class: 'btn btn-sm', type: 'button', text: ui.devices ? 'Refresh' : 'Check',
+            onclick: function () {
+              if (!cloud.transport) { ui.syncNote = { tone: 'error', text: 'Not connected.' }; openSettings(); return; }
+              cloud.transport.readMeta().then(function (meta) {
+                ui.devices = meta || {};
+                ui.syncNote = { tone: 'ok', text: 'Found ' + Object.keys(ui.devices).length + ' device(s) in this room.' };
+                openSettings();
+              });
+            }
+          })
+        ])
+      ]),
+
+      ui.devices ? el('div', { class: 'device-list' }, Object.keys(ui.devices).map(function (id) {
+        var d = ui.devices[id] || {};
+        return el('div', { class: 'device-row' }, [
+          el('span', { class: 'dot', style: 'background:' + (id === store.deviceId ? 'var(--hc, #22c55e)' : 'var(--text-3)') }),
+          el('span', { class: 'grow small truncate', text: (d.name || 'Unknown device') + (id === store.deviceId ? ' (this one)' : '') }),
+          el('span', { class: 'tiny dim', text: relativeTime(d.at) })
+        ]);
+      })) : null,
+
+      el('div', { class: 'kv' }, lines.map(function (l) {
+        return el('div', { class: 'kv-row' }, [
+          el('span', { class: 'kv-k', text: l.k }),
+          el('span', { class: 'kv-v truncate', text: l.v, title: l.v })
+        ]);
+      })),
+
+      el('div', { class: 'modal-actions' }, [
+        el('button', {
+          class: 'btn', type: 'button', html: icon('repeat', 15) + '<span>Sync now</span>',
+          onclick: function () {
+            if (!cloud.transport) return;
+            ui.syncNote = { tone: 'info', text: 'Syncing…' };
+            cloud.transport.pull().then(function () {
+              if (!cloud.applying) cloud.transport.push(docForCloud());
+              ui.syncNote = { tone: 'ok', text: 'Sync finished.' };
+              openSettings();
+            });
+          }
+        }),
+        el('button', {
+          class: 'btn', type: 'button', text: 'Turn off on this device',
+          onclick: function () {
+            stopSync(true);
+            saveNow();
+            ui.syncNote = { tone: 'info', text: 'Sync is off here. Your data stays on this device, and the cloud copy is untouched.' };
+            openSettings();
+          }
+        }),
+        el('span', { class: 'grow' }),
+        el('button', {
+          class: 'btn btn-danger', type: 'button', text: 'Delete cloud data',
+          onclick: function () {
+            closeModal();
+            confirmModal({
+              title: 'Delete the cloud copy?',
+              body: 'The room in your Firebase database will be emptied and sync will stop here. Habits on this device are kept. Other devices will still hold their own copies until they sync.',
+              confirmLabel: 'Delete cloud data', danger: true,
+              onConfirm: function () {
+                if (cloud.transport) {
+                  cloud.transport.clearRoom().then(function () {
+                    stopSync(true);
+                    saveNow();
+                    toast('Cloud copy deleted');
+                    openSettings();
+                  }).catch(function (err) {
+                    ui.syncNote = { tone: 'error', text: err.message || String(err) };
+                    openSettings();
+                  });
+                } else {
+                  stopSync(true); saveNow(); openSettings();
+                }
+              }
+            });
+          }
+        })
+      ])
+    ]);
+  }
+
+  /* --- sync actions ---------------------------------------------------- */
+
+  function enableSync(code, device) {
+    var canonical = E.canonicalCode(code);
+    if (canonical.length < 8) {
+      ui.syncNote = { tone: 'error', text: 'That sync code is too short. Use the generated one, or at least 8 characters.' };
+      openSettings();
+      return;
+    }
+    if (!cloud.config) {
+      ui.syncNote = { tone: 'error', text: 'Add your Firebase config first.' };
+      openSettings();
+      return;
+    }
+
+    store.settings.cloud = {
+      enabled: true,
+      code: canonical,
+      room: E.roomKeyFromCode(canonical),
+      device: device || deviceName(),
+      lastSync: 0
+    };
+    tick();
+    saveNow();
+    ui.busy = true;
+    ui.syncNote = { tone: 'info', text: 'Connecting to Firebase…' };
+    openSettings();
+
+    startSync().then(function (ok) {
+      ui.busy = false;
+      if (!ok) {
+        ui.syncNote = { tone: 'error', text: cloud.status.lastError || 'Could not connect. Check the config and the database rules.' };
+      } else {
+        ui.syncNote = { tone: 'ok', text: 'Sync is on. Enter the same code on your other device.' };
+      }
+      openSettings();
+      toast(ok ? 'Sync turned on' : 'Sync could not connect', null, ok ? undefined : 'warn');
+    });
+  }
+
+  function testConnection(code) {
+    if (!cloud.config) {
+      ui.syncNote = { tone: 'error', text: 'Save a Firebase config first.' };
+      openSettings();
+      return;
+    }
+    var canonical = E.canonicalCode(code || ui.codeDraft);
+    if (canonical.length < 8) {
+      ui.syncNote = { tone: 'error', text: 'Enter or generate a sync code first, so the test uses the right room.' };
+      openSettings();
+      return;
+    }
+    ui.syncNote = { tone: 'info', text: 'Testing…' };
+    openSettings();
+    var probe = Cloud.createTransport(cloud.config, E.roomKeyFromCode(canonical), {});
+    probe.test().then(function (res) {
+      ui.syncNote = { tone: 'ok', text: res.empty
+        ? 'Connection works — that room is empty, so this device will fill it.'
+        : 'Connection works — that room already has data, which will be merged in.' };
+      openSettings();
+    }).catch(function (err) {
+      ui.syncNote = { tone: 'error', text: err.message || String(err) };
+      openSettings();
+    });
+  }
+
+  function copyText(text, message) {
+    var done = function () { toast(message || 'Copied'); };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text, done); });
+        return;
+      }
+    } catch (err) { /* fall through */ }
+    fallbackCopy(text, done);
+  }
+
+  function fallbackCopy(text, done) {
+    // clipboard API needs a secure context; file:// pages fall back to this.
+    var ta = el('textarea', { style: 'position:fixed;top:-1000px', value: text });
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (err) { ok = false; }
+    document.body.removeChild(ta);
+    if (ok) done();
+    else confirmModal({ title: 'Copy this', body: text, confirmLabel: 'Done', onConfirm: function () {} });
+  }
+
+  function applyTheme(theme) {
+    store.settings.theme = theme;
+    document.documentElement.setAttribute('data-theme', theme);
+    var meta = $('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b0d10' : '#f6f7f9');
+    save();
+    var btn = $('#theme-btn');
+    if (btn) btn.innerHTML = icon(theme === 'dark' ? 'sun' : 'moon', 17);
+    var lbl = $('#theme-btn .sr-only');
+    if (lbl) lbl.textContent = 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' theme';
+  }
+
+  /* ================================================================ IO ==== */
+
+  function exportData() {
+    var text = E.serialize(store);
+    var name = 'habitbox-backup-' + today() + '.json';
+    try {
+      var blob = new Blob([text], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = el('a', { href: url, download: name });
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      toast('Backup downloaded');
+    } catch (err) {
+      // Fallback for environments that block downloads.
+      confirmModal({
+        title: 'Copy your backup',
+        body: 'Downloads are blocked here. Copy this text and save it as ' + name + ':\n\n' + text.slice(0, 1200) + '…',
+        confirmLabel: 'OK', onConfirm: function () {}
+      });
+    }
+  }
+
+  function importData() {
+    var input = el('input', { type: 'file', accept: '.json,application/json', style: 'display:none' });
+    document.body.appendChild(input);
+    input.addEventListener('change', function () {
+      var file = input.files && input.files[0];
+      if (!file) { input.remove(); return; }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var res = E.deserialize(String(reader.result));
+        document.body.removeChild(input);
+        if (res.error) { toast(res.error, null, 'warn'); return; }
+        confirmModal({
+          title: 'Replace your data?',
+          body: 'The backup contains ' + res.state.habits.length + ' habits. Importing replaces everything currently on this device.',
+          confirmLabel: 'Import',
+          onConfirm: function () {
+            var device = store.deviceId;
+            var cloudCfg = store.settings.cloud;
+            store = res.state;
+            store.deviceId = device || E.newDeviceId();
+            store.settings.cloud = cloudCfg || E.emptyCloud();
+            store.settings.seeded = true;
+            ensureIdentity();
+            tick();
+            saveNow();
+            if (cloudReady()) cloud.transport.push(docForCloud());
+            ui.month = E.monthStart(today());
+            ui.selectedDay = today();
+            applyTheme(store.settings.theme || 'dark');
+            closeModal();
+            render();
+            toast('Backup imported');
+          }
+        });
+      };
+      reader.onerror = function () { toast('Could not read that file', null, 'warn'); document.body.removeChild(input); };
+      reader.readAsText(file);
+    });
+    input.click();
+  }
+
+  /* ============================================================== actions = */
+
+  /** Write one day's value as this device, stamped so merges can order it. */
+  function writeDay(habitId, day, value) {
+    E.setValue(store.entries, habitId, day, value, Date.now(), store.deviceId);
+    tick();
+  }
+
+  /** Tap a habit's check button. */
+  function bumpHabit(id) {
+    var h = find(id);
+    if (!h) return;
+    var day = today();
+    var before = E.getValue(store.entries, h.id, day);
+    var wasDone = E.isComplete(h, store.entries, day);
+
+    if (h.type === 'simple') {
+      writeDay(h.id, day, before > 0 ? 0 : 1);
+    } else if (h.type === 'count') {
+      // Every tap adds one rep; the Undo button takes them back off.
+      writeDay(h.id, day, before + 1);
+    } else {
+      if (wasDone) {
+        writeDay(h.id, day, 0);
+      } else {
+        var step = h.target <= 4 ? 1 : Math.ceil(h.target / 5);
+        var next = before + step;
+        writeDay(h.id, day, next >= h.target ? h.target : next);
+      }
+    }
+
+    var nowDone = E.isComplete(h, store.entries, day);
+    save();
+    renderList();
+    renderStatsOnly();
+
+    if (nowDone && !wasDone) {
+      var st = E.stats(h, store.entries, day);
+      var all = E.overall(habits(), store.entries, day);
+      if (all.todayScheduled > 0 && all.todayDone >= all.todayScheduled) {
+        toast('🎉 Every habit done today' + (all.perfectStreak > 1 ? ' — ' + all.perfectStreak + ' days in a row' : ''));
+      } else if (st.current > 1) {
+        toast('🔥 ' + st.current + ' day streak on “' + h.name + '”');
+      }
+    }
+  }
+
+  function renderStatsOnly() {
+    // Cheap path: refresh the stat tiles without rebuilding the whole page.
+    var tiles = $('#view-today .stats');
+    if (!tiles) return;
+    var o = E.overall(habits(), store.entries, today());
+    var values = tiles.querySelectorAll('.stat');
+    if (values.length < 4) return;
+    var data = [
+      [o.todayScheduled ? o.todayDone + '/' + o.todayScheduled : '0', o.todayScheduled ? Math.round((o.todayRate || 0) * 100) + '% complete' : 'No habits due'],
+      [String(o.perfectStreak), o.perfectStreak === 1 ? 'day with everything done' : 'days with everything done'],
+      [String(o.best), o.bestHabit ? 'on ' + o.bestHabit : 'no streak yet'],
+      [o.avg30 === null ? '—' : Math.round(o.avg30 * 100) + '%', o.totalChecks + ' check-ins all time']
+    ];
+    values.forEach(function (tile, i) {
+      var v = tile.querySelector('.stat-value span');
+      var f = tile.querySelector('.stat-foot');
+      if (v) v.textContent = data[i][0];
+      if (f) f.textContent = data[i][1];
+    });
+  }
+
+  function toggleDayFor(habitId, day) {
+    var h = find(habitId);
+    if (!h) return;
+    if (E.diffDays(day, today()) > 0) { toast('That day has not happened yet', null, 'warn'); return; }
+    var done = E.isComplete(h, store.entries, day);
+    writeDay(h.id, day, done ? 0 : (h.type === 'simple' ? 1 : h.target));
+    save();
+    render();
+  }
+
+  function deleteHabit(id) {
+    var h = find(id);
+    if (!h) return;
+    var entries = store.entries[h.id];
+    confirmModal({
+      title: 'Delete “' + h.name + '”?',
+      body: 'Its full history will be removed from this device — and from your other synced devices. You can also archive it instead to keep the history but hide it from the list.',
+      confirmLabel: 'Delete habit', danger: true,
+      onConfirm: function () {
+        store.habits = store.habits.filter(function (x) { return x.id !== id; });
+        delete store.entries[id];
+        // A tombstone makes the delete travel to devices that still have it.
+        store.deleted[id] = Date.now();
+        tick();
+        save();
+        render();
+        toast('“' + h.name + '” deleted', {
+          label: 'Undo',
+          run: function () {
+            store.habits.push(h);
+            if (entries) store.entries[id] = entries;
+            delete store.deleted[id];
+            touch(h);
+            tick();
+            save(); render();
+          }
+        });
+      }
+    });
+  }
+
+  /* =============================================================== render = */
+
+  function render() {
+    document.documentElement.setAttribute('data-theme', store.settings.theme || 'dark');
+    $('#view-today').hidden = ui.view !== 'today';
+    $('#view-calendar').hidden = ui.view !== 'calendar';
+    $$('#view-switch .seg-btn').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute('data-view') === ui.view ? 'true' : 'false');
+    });
+    if (ui.view === 'today') renderToday();
+    else renderCalendar();
+
+    var foot = $('#habit-count');
+    if (foot) {
+      var n = habits().length;
+      foot.textContent = n + (n === 1 ? ' habit' : ' habits') + ' · ' + E.overall(habits(), store.entries, today()).totalChecks + ' check-ins · stored on this device';
+    }
+  }
+
+  /* =============================================================== events = */
+
+  function bindGlobal() {
+    document.addEventListener('click', function (ev) {
+      var t = ev.target;
+      var hit = function (sel) { return t.closest ? t.closest(sel) : null; };
+
+      var newNode = hit('[data-new]');
+      if (newNode) { openHabitForm('new'); return; }
+
+      var bump = hit('[data-bump]');
+      if (bump) { bumpHabit(bump.getAttribute('data-bump')); return; }
+
+      var undoTap = hit('[data-undo]');
+      if (undoTap) {
+        var uh = find(undoTap.getAttribute('data-undo'));
+        if (uh) {
+          var cur = E.getValue(store.entries, uh.id, today());
+          var step = uh.type === 'goal' ? (uh.target <= 4 ? 1 : Math.ceil(uh.target / 5)) : 1;
+          writeDay(uh.id, today(), Math.max(0, cur - step));
+          save(); renderList(); renderStatsOnly();
+        }
+        return;
+      }
+
+      var edit = hit('[data-edit]');
+      if (edit) { openHabitForm('edit', edit.getAttribute('data-edit')); return; }
+
+      var del = hit('[data-del]');
+      if (del) { deleteHabit(del.getAttribute('data-del')); return; }
+
+      var heatToggle = hit('[data-toggle-heat]');
+      if (heatToggle) {
+        var hid = heatToggle.getAttribute('data-toggle-heat');
+        ui.openHeat[hid] = !ui.openHeat[hid];
+        renderList();
+        return;
+      }
+
+      var dayToggle = hit('[data-day-toggle]');
+      if (dayToggle && !dayToggle.disabled) {
+        toggleDayFor(dayToggle.getAttribute('data-day-toggle'), dayToggle.getAttribute('data-day'));
+        return;
+      }
+
+      var openDay = hit('[data-open-day]');
+      if (openDay) {
+        ui.selectedDay = openDay.getAttribute('data-day');
+        if (ui.view !== 'calendar') { ui.view = 'calendar'; ui.month = E.monthStart(ui.selectedDay); render(); }
+        else renderCalendar();
+        var dayStr = ui.selectedDay;
+        var dayNode = document.querySelector('.cal-day[data-day="' + dayStr + '"]');
+        if (dayNode && dayNode.scrollIntoView) dayNode.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
+
+      var monthBtn = hit('[data-month]');
+      if (monthBtn) {
+        var v = monthBtn.getAttribute('data-month');
+        ui.month = v === 'today' ? E.monthStart(today()) : E.addMonths(ui.month, Number(v));
+        if (v === 'today') ui.selectedDay = today();
+        renderCalendar();
+        return;
+      }
+
+      var heatCell = hit('[data-heat][data-habit]');
+      if (heatCell) {
+        var cellDay = heatCell.getAttribute('data-day');
+        ui.selectedDay = cellDay;
+        ui.view = 'calendar';
+        ui.month = E.monthStart(cellDay);
+        render();
+        return;
+      }
+
+      var syncChip = hit('#sync-chip');
+      if (syncChip) {
+        if (cloud.transport) {
+          syncChip.textContent = 'Syncing…';
+          cloud.transport.pull().then(function () { toast('Checked for changes'); });
+        } else {
+          ui.settingsTab = 'cloud';
+          openSettings();
+        }
+        return;
+      }
+
+      var sw = hit('[data-view]');
+      if (sw) { ui.view = sw.getAttribute('data-view'); render(); return; }
+    });
+
+    $('#theme-btn').addEventListener('click', function () {
+      applyTheme((store.settings.theme || 'dark') === 'dark' ? 'light' : 'dark');
+    });
+
+    $('#settings-btn').addEventListener('click', openSettings);
+
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape') {
+        if (openModalEl) { closeModal(); ev.preventDefault(); return; }
+        if (ui.view === 'calendar') { ui.view = 'today'; render(); ev.preventDefault(); }
+        return;
+      }
+      var typing = /^(input|textarea|select)$/i.test((ev.target.tagName || '')) || ev.target.isContentEditable;
+      if (typing || openModalEl) return;
+      if (ev.key === 'n' || ev.key === 'N') { openHabitForm('new'); ev.preventDefault(); }
+      else if (ev.key === 't' || ev.key === 'T') { ui.view = 'today'; render(); ev.preventDefault(); }
+      else if (ev.key === 'c' || ev.key === 'C') { ui.view = 'calendar'; render(); ev.preventDefault(); }
+      else if (ev.key === '?') { openSettings(); ev.preventDefault(); }
+    });
+
+    // Keep the view in sync when the day rolls over or another tab writes.
+    window.addEventListener('storage', function (ev) {
+      if (ev.key === LS_CONFIG) { cloud.config = loadConfig(); return; }
+      if (ev.key !== LS_KEY) return;
+      var incoming;
+      try { incoming = E.migrate(JSON.parse(ev.newValue || '{}')); } catch (err) { return; }
+      // Another tab may have checked something off; fold it in rather than replacing.
+      adopt(E.mergeStates(docForCloud(), incoming), true);
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState !== 'visible') return;
+      // Coming back to the tab may cross midnight, and may be the moment a
+      // sleeping phone regains a network — so re-render and pull.
+      if (document.body.dataset.bootDay !== today()) {
+        document.body.dataset.bootDay = today();
+        render();
+      }
+      if (cloud.transport) cloud.transport.pull();
+    });
+
+    window.addEventListener('online', function () {
+      if (cloud.transport) {
+        cloud.transport.pull().then(function () { cloud.transport.push(docForCloud()); });
+      }
+    });
+  }
+
+  function boot() {
+    document.body.dataset.bootDay = today();
+    applyTheme(store.settings.theme || 'dark');
+    if (!store.habits.length && !store.settings.seeded) {
+      store = E.seed();
+      store.settings.theme = store.settings.theme || 'dark';
+      saveNow();
+    }
+    ensureIdentity();
+    cloud.config = loadConfig();
+
+    bindGlobal();
+    render();
+
+    if (store.settings.cloud.enabled && cloud.config) {
+      startSync().then(function (ok) {
+        if (!ok && cloud.status.lastError) {
+          toast('Sync problem: ' + cloud.status.lastError, null, 'warn');
+        }
+      });
+    }
+
+    // Expose a small surface for debugging and for the headless UI tests.
+    window.HabitBox = {
+      state: function () { return store; },
+      engine: E,
+      cloud: Cloud,
+      sync: {
+        status: function () { return cloud.status; },
+        start: startSync,
+        stop: stopSync,
+        push: function () { return cloud.transport ? cloud.transport.push(docForCloud()) : null; },
+        pull: function () { return cloud.transport ? cloud.transport.pull() : null; },
+        doc: docForCloud,
+        receive: onRemote,
+        transport: function () { return cloud.transport; }
+      },
+      config: function () { return cloud.config; },
+      setConfig: function (c) { cloud.config = c; saveConfig(c); },
+      ui: ui,
+      openSettings: openSettings,
+      render: render,
+      reset: function () { store = E.seed(); ensureIdentity(); saveNow(); render(); }
+    };
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+</body>
+</html>
