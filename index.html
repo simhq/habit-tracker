@@ -1107,6 +1107,15 @@ textarea.input {
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* On a phone the topbar row cannot hold the brand, the view switcher, "New
+   habit", the theme toggle and settings side by side (that needs ~480px). It
+   wraps instead, so nothing — especially Settings — is pushed off the edge. */
+@media (max-width: 620px) {
+  .topbar-inner { flex-wrap: wrap; row-gap: 8px; }
+  .topbar-spacer { display: none; }
+  .topbar-cta { order: 5; flex: 1 1 100%; }
+}
+
 /* The 26-week default needs a smaller cell on a mid-size screen, otherwise the
    strip is 416px wide and pushes the whole page sideways. */
 @media (max-width: 720px) {
@@ -1126,8 +1135,8 @@ textarea.input {
   .brand span { display: none; }
   .stat-value { font-size: 22px; }
 
-  /* The topbar already offers "New habit"; a second full-width button next to
-     the date only competes with it. */
+  /* The topbar's wrapped CTA is the one primary action above the fold; the copy
+     inside the page head would just be a second full-width button. */
   .page-head > .row { display: none; }
 
   .toolbar .seg { order: 3; width: 100%; justify-content: space-between; }
@@ -1141,6 +1150,8 @@ textarea.input {
 @media (max-width: 420px) {
   /* One year of history cannot fit a phone-width card; the strip scrolls. */
   :root { --cell: 9px; --cell-gap: 2px; }
+  .brand-mark { width: 22px; height: 22px; }
+  #view-switch .seg-btn { padding: 0 9px; }
   .tab span { display: none; }
   .tab { height: 36px; }
   .kv-k { font-size: 11.5px; }
@@ -1189,7 +1200,7 @@ textarea.input {
 
     <div class="topbar-spacer"></div>
 
-    <button class="btn btn-primary" type="button" data-new="1" title="New habit (N)">
+    <button class="btn btn-primary topbar-cta" type="button" data-new="1" title="New habit (N)">
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
       <span class="btn-label-lg">New habit</span>
     </button>
@@ -2655,6 +2666,7 @@ textarea.input {
     configDraft: '',          // pasted Firebase config
     codeDraft: '',            // sync code being entered
     syncNote: null,           // { tone, text } shown in the Cloud tab
+    replaceConfig: false,     // showing the "use a different database" form
     busy: false,
     devices: null             // room device list, once fetched
   };
@@ -2683,14 +2695,48 @@ textarea.input {
     return E.migrate(parsed);
   }
 
+  /**
+   * The Firebase project this build syncs to.
+   *
+   * These values are public by design — they ship inside every copy of the file
+   * and are not a secret. Access is governed by the Realtime Database rules,
+   * and the room is protected by the sync code (see the README).
+   *
+   * Paste your own here to point a build at a different project, or paste a
+   * different config once in Settings → Sync (which overrides this default).
+   */
+  var DEFAULT_FIREBASE_CONFIG = {
+    apiKey: 'AIzaSyAR_n448UOmRR2ENDB2quiqhadEJQEuc6E',
+    databaseURL: 'https://habitbox-9adc9-default-rtdb.asia-southeast1.firebasedatabase.app',
+    projectId: 'habitbox-9adc9',
+    storageBucket: 'habitbox-9adc9.firebasestorage.app',
+    messagingSenderId: '941228485559',
+    appId: '1:941228485559:web:934375a19a6b6139969632'
+  };
+
+  /**
+   * Config resolution order: what this device saved, then the built-in default.
+   * Saving in Settings therefore overrides the default for that device only.
+   */
   function loadConfig() {
     try {
       var raw = localStorage.getItem(LS_CONFIG);
-      if (!raw) return null;
-      var parsed = JSON.parse(raw);
-      var check = Cloud.validateConfig(parsed);
-      return check.ok ? check.config : null;
-    } catch (err) { return null; }
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        var check = Cloud.validateConfig(parsed);
+        if (check.ok) return check.config;
+      }
+    } catch (err) { /* fall through to the built-in default */ }
+    var fallback = Cloud.validateConfig(DEFAULT_FIREBASE_CONFIG);
+    return fallback.ok ? fallback.config : null;
+  }
+
+  /** True when this device is using the config baked into the file. */
+  function usingBuiltInConfig() {
+    try {
+      if (localStorage.getItem(LS_CONFIG)) return false;
+    } catch (err) { /* treat as built-in */ }
+    return !!DEFAULT_FIREBASE_CONFIG.databaseURL;
   }
 
   function saveConfig(config) {
@@ -4186,20 +4232,26 @@ textarea.input {
       /* step 1: config */
       el('div', { class: 'step' }, [
         el('div', { class: 'step-head' }, [
-          el('span', { class: 'step-num', text: '1' }),
+          el('span', {
+            class: 'step-num' + (hasConfig ? ' is-on' : ''),
+            'aria-hidden': 'true',
+            html: hasConfig ? icon('check', 13) : '1'
+          }),
           el('div', {}, [
-            el('div', { class: 'set-label', text: hasConfig ? 'Firebase config — connected' : 'Paste your Firebase config' }),
+            el('div', { class: 'set-label', text: 'Database' }),
             el('div', { class: 'set-hint', text: hasConfig
-              ? 'Saved on this device. ' + cloud.config.databaseURL.replace(/^https:\/\//, '')
+              ? 'Using ' + cloud.config.databaseURL.replace(/^https:\/\//, '') +
+                (usingBuiltInConfig() ? ' (built into this file).' : ' (saved on this device).')
               : 'Firebase console → Project settings → Your apps → SDK setup. Copy the firebaseConfig object.' })
           ])
         ]),
         hasConfig ? el('div', { class: 'row', style: 'margin-top:10px' }, [
           el('button', {
-            class: 'btn btn-sm', type: 'button', text: 'Replace config',
-            onclick: function () { cloud.config = null; saveConfig(null); openSettings(); }
+            class: 'btn btn-sm', type: 'button', text: 'Use a different database',
+            onclick: function () { cloud.config = null; saveConfig(null); ui.replaceConfig = true; openSettings(); }
           })
-        ]) : el('div', {}, [
+        ]) : null,
+        (!hasConfig || ui.replaceConfig) ? el('div', { style: 'margin-top:10px' }, [
           el('textarea', {
             class: 'input', rows: '5', placeholder: '{\n  "apiKey": "AIza…",\n  "databaseURL": "https://your-project-default-rtdb.firebaseio.com"\n}',
             value: ui.configDraft,
@@ -4213,12 +4265,13 @@ textarea.input {
                 if (parsed.error) { ui.syncNote = { tone: 'error', text: parsed.error }; openSettings(); return; }
                 cloud.config = parsed.config;
                 saveConfig(parsed.config);
-                ui.syncNote = { tone: 'ok', text: 'Config saved. Now create or enter a sync code below.' };
+                ui.replaceConfig = false;
+                ui.syncNote = { tone: 'ok', text: 'Config saved on this device. Now create or enter a sync code below.' };
                 openSettings();
               }
             })
           ])
-        ])
+        ]) : null
       ]),
 
       /* step 2: code */
