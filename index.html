@@ -125,7 +125,14 @@
 /* ----------------------------------------------------------------- reset -- */
 *, *::before, *::after { box-sizing: border-box; }
 
-html, body { height: 100%; }
+/* Nothing in this app is meant to be wider than the screen. These two rules
+   are the backstop: a stray wide child can never make the page pan sideways. */
+html, body {
+  height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
 
 body {
   margin: 0;
@@ -270,6 +277,7 @@ svg { display: block; }
   max-width: 1080px;
   margin: 0 auto;
   padding: 24px var(--pad) 80px;
+  min-width: 0;
 }
 
 .page-head {
@@ -300,6 +308,7 @@ svg { display: block; }
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   padding: 14px 16px;
+  min-width: 0;
 }
 .stat-label {
   color: var(--text-3);
@@ -353,8 +362,11 @@ select.control {
 /* ---------------------------------------------------------- habit cards -- */
 .habits {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  /* min(340px, 100%) keeps the column at least 340px on wide screens but lets it
+     shrink on a narrow phone instead of forcing the grid wider than the screen. */
+  grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
   gap: 14px;
+  min-width: 0;
 }
 
 .habit {
@@ -364,6 +376,7 @@ select.control {
   border-radius: var(--r-xl);
   padding: 16px 16px 14px 20px;
   overflow: hidden;
+  min-width: 0;
   transition: border-color var(--mid), background var(--mid);
 }
 .habit::before {
@@ -386,7 +399,7 @@ select.control {
 .habit:hover::after { opacity: 1; }
 .habit.is-done { background: color-mix(in srgb, var(--hc, var(--accent)) 5%, var(--surface)); }
 
-.habit-head { display: flex; align-items: flex-start; gap: 11px; }
+.habit-head { display: flex; align-items: flex-start; gap: 11px; min-width: 0; }
 
 .habit-emoji {
   width: 38px; height: 38px; flex: none;
@@ -397,7 +410,7 @@ select.control {
   border: 1px solid var(--border);
 }
 
-.habit-id { flex: 1; min-width: 0; }
+.habit-id { flex: 1 1 auto; min-width: 0; }
 .habit-title {
   font-size: 15.5px; font-weight: 620; letter-spacing: -0.01em;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -405,6 +418,7 @@ select.control {
 .habit-meta {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   margin-top: 3px;
+  min-width: 0;
   color: var(--text-3); font-size: 12.5px;
 }
 
@@ -508,8 +522,10 @@ select.control {
 /* card actions */
 .habit-actions {
   display: flex; align-items: center; gap: 4px;
+  flex-wrap: wrap;
   margin-top: 12px;
   padding-top: 10px;
+  min-width: 0;
   border-top: 1px solid var(--border);
 }
 .icon-btn {
@@ -528,13 +544,15 @@ select.control {
 .habit-actions .spacer { flex: 1; }
 
 /* -------------------------------------------------------------- heatmap -- */
-.heat { margin-top: 12px; }
+.heat { margin-top: 12px; min-width: 0; }
 
 .heat-months {
   display: flex;
   gap: var(--cell-gap);
   margin: 0 0 4px 22px;
-  height: 13px;
+  overflow: hidden;
+  flex-wrap: wrap;
+  max-height: 26px;
 }
 .heat-months span {
   width: var(--cell);
@@ -543,10 +561,10 @@ select.control {
   font-size: 10px;
   line-height: 13px;
   white-space: nowrap;
-  overflow: visible;
+  overflow: hidden;
 }
 
-.heat-body { display: flex; gap: 6px; }
+.heat-body { display: flex; gap: 6px; min-width: 0; }
 
 .heat-days {
   display: flex; flex-direction: column; gap: var(--cell-gap);
@@ -560,9 +578,16 @@ select.control {
   text-align: right;
 }
 
+/* The grid is as wide as its cells; 100% + min-width:0 lets it shrink inside the
+   card and scroll within itself rather than stretching the card (and the page). */
 .heat-grid {
   display: flex; gap: var(--cell-gap);
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: 2px;
   scrollbar-width: thin;
 }
@@ -1054,8 +1079,10 @@ textarea.input {
   color: #05131a;
 }
 
+.year-heat { display: flex; flex-direction: column; min-width: 0; }
 .year-heat .heat-cell { width: 11px; height: 11px; }
 .year-heat .heat-months { margin-left: 22px; }
+.year-heat .heat-grid { max-width: 100%; }
 
 /* --------------------------------------------------------------- footer -- */
 .footer {
@@ -1067,30 +1094,53 @@ textarea.input {
 }
 
 /* ------------------------------------------------------------ responsive -- */
+
+/* No scrollbars on the heat strip: on a touch device it is swiped, and the
+   thin scrollbar is just noise on a phone. */
+@media (max-width: 640px) {
+  .heat-grid { scrollbar-width: none; }
+  .heat-grid::-webkit-scrollbar { display: none; }
+}
+
 @media (max-width: 900px) {
   .cal-wrap { grid-template-columns: minmax(0, 1fr); }
   .stats { grid-template-columns: repeat(2, 1fr); }
 }
 
+/* The 26-week default needs a smaller cell on a mid-size screen, otherwise the
+   strip is 416px wide and pushes the whole page sideways. */
+@media (max-width: 720px) {
+  :root { --cell: 11px; --cell-gap: 2px; }
+}
+
 @media (max-width: 640px) {
-  :root { --pad: 14px; --cell: 11px; --cell-gap: 2.5px; }
+  :root { --pad: 14px; --cell: 10px; --cell-gap: 2px; }
   body { font-size: 14.5px; }
   .page-title { font-size: 22px; }
   .habits { grid-template-columns: 1fr; }
-  .habit { padding: 14px 13px 12px 17px; }
+  .habit { padding: 14px 12px 12px 16px; }
   .check { width: 44px; height: 44px; }
   .bar, .bar-label { margin-left: 45px; }
   .type-pick { grid-template-columns: 1fr; }
   .grid-2 { grid-template-columns: 1fr; }
   .brand span { display: none; }
   .stat-value { font-size: 22px; }
+
+  /* The topbar already offers "New habit"; a second full-width button next to
+     the date only competes with it. */
+  .page-head > .row { display: none; }
+
   .toolbar .seg { order: 3; width: 100%; justify-content: space-between; }
-  .toolbar .seg .seg-btn { flex: 1; justify-content: center; }
+  .toolbar .seg .seg-btn { flex: 1; justify-content: center; padding: 0 6px; }
+  .toolbar .search { flex: 1 1 100%; max-width: none; }
   .modal { max-height: 92vh; }
   .code-inline.is-big { font-size: 12px; letter-spacing: .02em; }
+  .footer { gap: 8px; }
 }
 
 @media (max-width: 420px) {
+  /* One year of history cannot fit a phone-width card; the strip scrolls. */
+  :root { --cell: 9px; --cell-gap: 2px; }
   .tab span { display: none; }
   .tab { height: 36px; }
   .kv-k { font-size: 11.5px; }
@@ -3261,7 +3311,7 @@ textarea.input {
       card.appendChild(heatmapBlock(h, ui.heatWeeks));
     } else {
       card.appendChild(el('div', { class: 'heat', style: '--hc:' + h.color }, [
-        heatmapBlock(h, 8, 'heat-mini')
+        heatmapBlock(h, miniWeeks(), 'heat-mini')
       ]));
     }
 
@@ -3333,11 +3383,10 @@ textarea.input {
         return el('option', { value: c, text: c, selected: ui.habitFilter === c });
       }))) : null,
       el('span', { class: 'grow' }),
-      el('div', { class: 'seg', role: 'group', 'aria-label': 'Heatmap length' }, [
-        segBtn('8 weeks', ui.heatWeeks === 8, function () { ui.heatWeeks = 8; renderList(); }),
-        segBtn('26 weeks', ui.heatWeeks === 26, function () { ui.heatWeeks = 26; renderList(); }),
-        segBtn('1 year', ui.heatWeeks === 53, function () { ui.heatWeeks = 53; renderList(); })
-      ])
+      el('div', { class: 'seg', role: 'group', 'aria-label': 'Heatmap length' },
+        weekChoices().map(function (n) {
+          return segBtn(n + ' weeks', ui.heatWeeks === n, function () { ui.heatWeeks = n; renderList(); });
+        }))
     ]);
     host.appendChild(toolbar);
 
@@ -3348,6 +3397,31 @@ textarea.input {
 
   function segBtn(label, on, onclick) {
     return el('button', { class: 'seg-btn', type: 'button', 'aria-pressed': on ? 'true' : 'false', text: label, onclick: onclick });
+  }
+
+  /**
+   * How much history fits the screen. A 26-week strip needs roughly
+   * weeks × (cell + gap) px, so a phone gets shorter spans and the year grid
+   * stays a swipe away only on the big screens.
+   */
+  function viewportWidth() {
+    if (typeof window !== 'undefined' && window.innerWidth) return window.innerWidth;
+    return 1080;
+  }
+
+  function weekChoices() {
+    var w = viewportWidth();
+    if (w <= 430) return [4, 13, 26];
+    if (w <= 760) return [8, 26];
+    return [8, 26, 53];
+  }
+
+  /** Weeks shown when a card's heatmap is collapsed. */
+  function miniWeeks() {
+    var w = viewportWidth();
+    if (w <= 430) return 6;
+    if (w <= 760) return 7;
+    return 8;
   }
 
   function renderList() {
@@ -4757,6 +4831,27 @@ textarea.input {
         cloud.transport.pull().then(function () { cloud.transport.push(docForCloud()); });
       }
     });
+
+    // Rotating a phone moves it between two layout zones; redraw so the heatmap
+    // spans are chosen for the new width.
+    var lastZone = widthZone();
+    var resizeTimer = null;
+    window.addEventListener('resize', function () {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        resizeTimer = null;
+        var zone = widthZone();
+        if (zone === lastZone) return;
+        lastZone = zone;
+        render();
+      }, 180);
+    });
+  }
+
+  /** Coarse viewport bands that change how much history is drawn. */
+  function widthZone() {
+    var w = viewportWidth();
+    return w <= 430 ? 's' : w <= 760 ? 'm' : 'l';
   }
 
   function boot() {
