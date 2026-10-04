@@ -2354,24 +2354,83 @@ textarea.input {
     var setTimeoutImpl = opts.setTimeout || setTimeout;
     var clearTimeoutImpl = opts.clearTimeout || clearTimeout;
 
+    /**
+     * fetch with a deadline. A request that never settles would leave the app
+     * showing "Connecting…" forever with no error to read, which is the worst
+     * possible failure mode for something the user is trying to debug.
+     */
+    function doFetch(url, init) {
+      if (!fetchImpl) return Promise.reject(new Error('This browser cannot reach the network.'));
+      if (typeof AbortController !== 'function') return fetchImpl(url, init);
+      var ctl = new AbortController();
+      var timer = setTimeoutImpl(function () {
+        try { ctl.abort(); } catch (e) { /* already done */ }
+      }, opts.timeoutMs || 15000);
+      // NB: call fetchImpl, not doFetch — the wrapper must not call itself.
+      return fetchImpl(url, Object.assign({}, init, { signal: ctl.signal }))
+        .catch(function (err) {
+          if (err && (err.name === 'AbortError' || /aborted/i.test(err.message || ''))) {
+            throw new Error('Firebase did not answer within ' + Math.round((opts.timeoutMs || 15000) / 1000) + 's.');
+          }
+          throw err;
+        })
+        .then(function (res) { clearTimeoutImpl(timer); return res; },
+              function (err) { clearTimeoutImpl(timer); throw err; });
+    }
+
     var stopped = false;
     var sse = null;
     var pollTimer = null;
     var pushTimer = null;
     var pendingState = null;
     var lastRemoteFingerprint = '';
-    var stats = { pushed: 0, received: 0, errors: 0, mode: 'idle', lastError: '', lastSync: 0 };
+    var stats = {
+      pushed: 0, received: 0, errors: 0, mode: 'idle',
+      lastError: '', lastOkAt: 0, lastErrorAt: 0,
+      failedOp: '',      // which kind of exchange last failed: 'read' | 'write'
+      lastOkOp: ''       // which kind of exchange last succeeded
+    };
 
     function status(patch) {
-      Object.assign(stats, patch, { lastSync: stats.lastSync });
+      Object.assign(stats, patch, {
+        lastSync: stats.lastSync, lastOkAt: stats.lastOkAt, lastErrorAt: stats.lastErrorAt,
+        failedOp: stats.failedOp, lastOkOp: stats.lastOkOp
+      });
       if (opts.onStatus) opts.onStatus(publicStatus());
+    }
+
+    /** Record a failed exchange and what kind it was. */
+    function statusError(op) {
+      stats.errors++;
+      stats.failedOp = op;
+      stats.lastErrorAt = now();
+    }
+
+    /**
+     * Record a completed exchange. Clearing `lastError` only makes sense when
+     * the SAME kind of exchange has now worked: a push begins with a read, so a
+     * healthy read must not report a failed write as fixed.
+     */
+    function statusOk(op, patch) {
+      stats.lastOkAt = now();
+      stats.lastOkOp = op;
+      var patch2 = Object.assign({}, patch || {});
+      if (!stats.lastError || stats.failedOp === op) {
+        stats.lastError = '';
+        stats.failedOp = '';
+      } else {
+        patch2.lastError = stats.lastError;
+      }
+      status(patch2);
     }
 
     function publicStatus() {
       return {
         mode: stats.mode,
         lastError: stats.lastError,
-        lastSync: stats.lastSync,
+        lastErrorAt: stats.lastErrorAt,
+        lastOkAt: stats.lastOkAt,
+        failedOp: stats.failedOp,
         pushed: stats.pushed,
         received: stats.received,
         errors: stats.errors
@@ -2385,7 +2444,7 @@ textarea.input {
       stats.received++;
       stats.lastSync = now();
       lastRemoteFingerprint = value ? JSON.stringify(value).length + ':' + hash(JSON.stringify(value)) : '';
-      status({ mode: sse ? 'live' : 'polling', lastError: '' });
+      statusOk('read', { mode: sse ? 'live' : 'polling' });
       if (opts.onRemote) opts.onRemote(value);
     }
 
@@ -2397,7 +2456,7 @@ textarea.input {
 
     function pull() {
       if (stopped || !fetchImpl) return Promise.resolve(null);
-      return fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+      return doFetch(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
         .then(function (res) {
           return res.text().then(function (text) {
             if (!res.ok) throw new Error(describeHttpError(res.status, text));
@@ -2407,13 +2466,13 @@ textarea.input {
               lastRemoteFingerprint = fingerprint;
               deliver(value);
             } else {
-              status({ mode: sse ? 'live' : 'polling', lastError: '' });
+              statusOk({ mode: sse ? 'live' : 'polling' });
             }
             return value;
           });
         })
         .catch(function (err) {
-          stats.errors++;
+          statusError('read');
           status({ mode: 'error', lastError: err.message || String(err) });
           return null;
         });
@@ -2422,7 +2481,7 @@ textarea.input {
     /* --- writes -------------------------------------------------------- */
 
     function put(doc) {
-      return fetchImpl(urlFor(config, room, DOC_PATH), {
+      return doFetch(urlFor(config, room, DOC_PATH), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(doc)
@@ -2433,7 +2492,7 @@ textarea.input {
           stats.lastSync = now();
           // Remember what we last wrote so an unchanged echo is not re-delivered.
           lastRemoteFingerprint = hash(JSON.stringify(doc));
-          status({ mode: sse ? 'live' : 'polling', lastError: '' });
+          statusOk('write', { mode: sse ? 'live' : 'polling' });
         });
       });
     }
@@ -2463,7 +2522,7 @@ textarea.input {
         var run = function () {
           if (stopped || ran) return;
           ran = true;
-          fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+          doFetch(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
             .then(function (res) { return res.ok ? res.json() : null; })
             .catch(function () { return null; })
             .then(function (serverDoc) {
@@ -2477,7 +2536,7 @@ textarea.input {
               return put(doc);
             })
             .catch(function (err) {
-              stats.errors++;
+              statusError('read');
               status({ mode: 'error', lastError: err.message || String(err) });
             });
         };
@@ -2485,7 +2544,7 @@ textarea.input {
         // Race the read against a timer: if the read is slow or fails, we still
         // write, so a flaky read can never leave a tap unsent.
         var timer = setTimeoutImpl(run, opts.readTimeoutMs || 8000);
-        fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+        doFetch(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
           .then(function (res) { return res.ok ? res.json() : null; })
           .catch(function () { return null; })
           .then(function (serverDoc) {
@@ -2501,7 +2560,9 @@ textarea.input {
             return put(doc);
           })
           .catch(function (err) {
-            stats.errors++;
+            // The whole read-modify-write belongs to the write path, so a
+            // failure here (including a refused PUT) is a write failure.
+            statusError('write');
             status({ mode: 'error', lastError: err.message || String(err) });
           });
       }, opts.debounceMs === undefined ? PUSH_DEBOUNCE_MS : opts.debounceMs);
@@ -2510,7 +2571,7 @@ textarea.input {
     /** Announce this device so the Settings screen can list the room's devices. */
     function announce(device) {
       if (!fetchImpl || !device) return Promise.resolve();
-      return fetchImpl(urlFor(config, room, META_PATH + '/' + device.id), {
+      return doFetch(urlFor(config, room, META_PATH + '/' + device.id), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: device.name, at: now() })
@@ -2519,7 +2580,7 @@ textarea.input {
 
     function readMeta() {
       if (!fetchImpl) return Promise.resolve(null);
-      return fetchImpl(urlFor(config, room, META_PATH), { method: 'GET', cache: 'no-store' })
+      return doFetch(urlFor(config, room, META_PATH), { method: 'GET', cache: 'no-store' })
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(unwrap)
         .catch(function () { return null; });
@@ -2527,7 +2588,7 @@ textarea.input {
 
     function clearRoom() {
       if (!fetchImpl) return Promise.resolve();
-      return fetchImpl(urlFor(config, room), { method: 'DELETE' })
+      return doFetch(urlFor(config, room), { method: 'DELETE' })
         .then(function (res) {
           if (!res.ok) throw new Error(describeHttpError(res.status, ''));
           lastRemoteFingerprint = '';
@@ -2595,7 +2656,7 @@ textarea.input {
     /** Write and read once, to prove the config works before trusting it. */
     function test() {
       if (!fetchImpl) return Promise.reject(new Error('This browser cannot reach the network.'));
-      return fetchImpl(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
+      return doFetch(urlFor(config, room, DOC_PATH), { method: 'GET', cache: 'no-store' })
         .then(function (res) {
           return res.text().then(function (text) {
             if (!res.ok) throw new Error(describeHttpError(res.status, text));
@@ -2646,6 +2707,9 @@ textarea.input {
   if (!E) { document.body.innerHTML = '<p style="padding:24px">Engine failed to load.</p>'; return; }
 
   /* ================================================================ state == */
+
+  /** Shown in Settings so you can tell which copy of the file a device loaded. */
+  var BUILD = 'v3';
 
   var LS_KEY = E.STORAGE_KEY;
   var LS_CONFIG = 'habitbox.firebase';   // device-local, never synced
@@ -2779,6 +2843,9 @@ textarea.input {
     config: null,
     transport: null,
     status: { mode: 'off', lastError: '', lastSync: 0 },
+    reportedError: '',        // the last failure, kept for the UI
+    lastErrorAt: 0,           // when that failure happened
+    retryTimer: null,
     lastPushed: '',
     applying: false
   };
@@ -2898,6 +2965,13 @@ textarea.input {
     cloud.transport = Cloud.createTransport(cloud.config, cfg.room, {
       onRemote: onRemote,
       onStatus: function (s) {
+        // Only a successful exchange of the SAME kind clears an error. A push
+        // begins with a read, so without this a lost write would be masked by the
+        // read that precedes the next push.
+        var fixed = !s.lastError || (s.failedOp && s.lastOkOp === s.failedOp);
+        if (fixed) { cloud.reportedError = ''; cloud.lastErrorAt = 0; }
+        else { cloud.reportedError = s.lastError; cloud.lastErrorAt = s.lastErrorAt || Date.now(); }
+        s.lastError = cloud.reportedError;
         cloud.status = s;
         paintSyncStatus();
       }
@@ -2908,31 +2982,61 @@ textarea.input {
       // Upload what we have. Without this, a device that turns sync on would
       // show an empty room to its other devices until the next local edit.
       cloud.transport.push(docForCloud());
+      scheduleRetryIfBroken();
       return true;
     }).catch(function (err) {
       cloud.status = { mode: 'error', lastError: err.message || String(err), lastSync: 0 };
+      cloud.lastErrorAt = Date.now();
       paintSyncStatus();
+      scheduleRetryIfBroken();
       return false;
     });
   }
 
+  /**
+   * If the connection is not working, try once more shortly afterwards. This
+   * covers the common real-world cases: publishing the database rules a moment
+   * after turning sync on, and a phone waking up on a flaky network.
+   */
+  function scheduleRetryIfBroken() {
+    if (cloud.retryTimer) { clearTimeout(cloud.retryTimer); cloud.retryTimer = null; }
+    cloud.retryTimer = setTimeout(function () {
+      cloud.retryTimer = null;
+      if (!cloudReady()) return;
+      var s = cloud.status;
+      if (s.mode !== 'error' && !s.lastError) return;
+      cloud.transport.pull();
+      cloud.transport.push(docForCloud());
+      paintSyncStatus();
+    }, 15000);
+  }
+
   function stopSync(clearFlag) {
+    if (cloud.retryTimer) { clearTimeout(cloud.retryTimer); cloud.retryTimer = null; }
     if (cloud.transport) { try { cloud.transport.stop(); } catch (e) { /* gone */ } }
     cloud.transport = null;
     cloud.lastPushed = '';
+    cloud.reportedError = '';
+    cloud.lastErrorAt = 0;
     if (clearFlag !== false && store.settings.cloud) store.settings.cloud.enabled = false;
     cloud.status = { mode: 'off', lastError: '', lastSync: 0 };
     paintSyncStatus();
   }
 
+  /**
+   * The status has two independent parts — is the connection up, and did the
+   * last exchange work — so report them separately rather than hiding a failed
+   * write behind a healthy connection.
+   */
   function syncStatusLabel() {
-    var m = cloud.status.mode;
     if (!store.settings.cloud || !store.settings.cloud.enabled) return 'Off';
+    var m = cloud.status.mode;
+    var broken = m === 'error' || !!cloud.status.lastError;
+    if (broken) return m === 'off' ? 'Off' : 'Not syncing';
     if (m === 'live') return 'Live';
     if (m === 'polling') return 'Checking for changes';
     if (m === 'syncing') return 'Saving…';
     if (m === 'connecting') return 'Connecting…';
-    if (m === 'error') return 'Not syncing';
     return 'Off';
   }
 
@@ -2952,11 +3056,13 @@ textarea.input {
     var on = store.settings.cloud && store.settings.cloud.enabled;
     chip.hidden = !on;
     if (!on) return;
-    var mode = cloud.status.mode;
-    chip.className = 'chip ' + (mode === 'error' ? 'is-error' : mode === 'live' ? 'is-live' : '');
+    var broken = cloud.status.mode === 'error' || !!cloud.status.lastError;
+    chip.className = 'chip ' + (broken ? 'is-error' : cloud.status.mode === 'live' ? 'is-live' : '');
     chip.textContent = syncStatusLabel();
-    chip.title = 'Last synced ' + relativeTime(cloud.status.lastSync) +
-      (cloud.status.lastError ? ' · ' + cloud.status.lastError : '');
+    var bits = ['Last synced ' + relativeTime(cloud.status.lastSync)];
+    if (cloud.lastErrorAt) bits.push('last error ' + relativeTime(cloud.lastErrorAt));
+    if (cloud.status.lastError) bits.push(cloud.status.lastError);
+    chip.title = bits.join(' · ');
   }
 
   function today() { return E.todayKey(); }
@@ -4101,7 +4207,10 @@ textarea.input {
           el('div', { class: 'set-label', text: 'This device' }),
           el('div', { class: 'set-hint', text: 'Devices are told apart so edits can be merged without guessing.' })
         ]),
-        el('code', { class: 'code-inline', text: (s.cloud && s.cloud.device) || deviceName() })
+        el('div', { class: 'row' }, [
+          el('code', { class: 'code-inline', text: (s.cloud && s.cloud.device) || deviceName() }),
+          el('span', { class: 'tiny dim', text: BUILD })
+        ])
       ]),
 
       el('div', { class: 'set-row' }, [
@@ -4328,12 +4437,16 @@ textarea.input {
   function cloudConnectedPanel(s) {
     var st = cloud.status;
     var lines = [
-      { k: 'Status', v: syncStatusLabel() + (st.lastError ? ' — ' + st.lastError : '') },
+      { k: 'Status', v: syncStatusLabel() },
       { k: 'Last synced', v: relativeTime(st.lastSync) },
       { k: 'Database', v: (cloud.config ? cloud.config.databaseURL.replace(/^https:\/\//, '') : 'not configured') },
       { k: 'Changes sent / received', v: st.pushed + ' / ' + st.received },
-      { k: 'This device', v: (s.cloud.device || deviceName()) }
+      { k: 'This device', v: (s.cloud.device || deviceName()) },
+      { k: 'App build', v: BUILD + ' · ' + (usingBuiltInConfig() ? 'built-in database' : 'custom database') }
     ];
+    if (st.lastError) {
+      lines.splice(1, 0, { k: 'Last error', v: st.lastError + ' (' + relativeTime(cloud.lastErrorAt) + ')' });
+    }
 
     return el('div', {}, [
       note(),
@@ -4743,7 +4856,8 @@ textarea.input {
     var foot = $('#habit-count');
     if (foot) {
       var n = habits().length;
-      foot.textContent = n + (n === 1 ? ' habit' : ' habits') + ' · ' + E.overall(habits(), store.entries, today()).totalChecks + ' check-ins · stored on this device';
+      foot.textContent = n + (n === 1 ? ' habit' : ' habits') + ' · ' +
+        E.overall(habits(), store.entries, today()).totalChecks + ' check-ins · ' + BUILD;
     }
   }
 
